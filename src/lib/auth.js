@@ -29,6 +29,7 @@ export const MODULES = [
   { key: 'planning',    label: 'Planning',    icon: '📅', href: '/planning' },
   { key: 'personnel',   label: 'Personnel',   icon: '👥', href: '/personnel' },
   { key: 'commercial',  label: 'Commercial',  icon: '💼', href: '/commercial' },
+  { key: 'clients',     label: 'Clients',     icon: '👥', href: '/clients' },
   { key: 'comptabilite', label: 'Comptabilité', icon: '💰', href: '/comptabilite' },
   { key: 'atelier',     label: 'Atelier',     icon: '🔧', href: '/atelier' },
   { key: 'anomalies',   label: 'Anomalies',   icon: '⚠️', href: '/anomalies' },
