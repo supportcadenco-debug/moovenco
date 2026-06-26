@@ -25,7 +25,7 @@ const EMPTY_FORM = {
   heure_depart_garage: '', heure_prise_charge: '', heure_depart: '',
   heure_retour: '', heure_retour_garage: '',
   lieu_prise_charge: '', lieu_depose: '',
-  client_adresse: '', client_cp_ville: '', client_responsable: '',
+  client_id: '', client_adresse: '', client_cp_ville: '', client_responsable: '',
   client_tel: '', client_mail: '',
 }
 
@@ -41,8 +41,9 @@ export default function Commercial() {
   const [search, setSearch] = useState('')
   const [generatingBC, setGeneratingBC] = useState(false)
   const [drivers, setDrivers] = useState<any[]>([])
+  const [clients, setClients] = useState<any[]>([])
 
-  useEffect(() => { loadOrders(); loadDrivers() }, [])
+  useEffect(() => { loadOrders(); loadDrivers(); loadClients() }, [])
 
   async function loadOrders() {
     const { data, error } = await supabase
@@ -60,6 +61,13 @@ export default function Commercial() {
       .eq('active', true)
       .order('name')
     setDrivers(data || [])
+  }
+
+  async function loadClients() {
+    const { data } = await supabase
+      .from('clients').select('id, name, contact_nom, contact_prenom, contact_tel, contact_mail, adresse, cp, ville, contact_fonction')
+      .eq('company_id', COMPANY_ID).order('name')
+    setClients(data || [])
   }
 
   function calcTTC() {
@@ -95,6 +103,7 @@ export default function Commercial() {
       heure_depart: form.heure_depart, heure_retour: form.heure_retour,
       heure_retour_garage: form.heure_retour_garage,
       lieu_prise_charge: form.lieu_prise_charge, lieu_depose: form.lieu_depose,
+      client_id: form.client_id || null,
       client_adresse: form.client_adresse, client_cp_ville: form.client_cp_ville,
       client_responsable: form.client_responsable, client_tel: form.client_tel,
       client_mail: form.client_mail,
@@ -528,6 +537,28 @@ export default function Commercial() {
                   ))}
 
                   <div style={{ fontSize: '10px', fontWeight: '700', color: '#8A95A3', textTransform: 'uppercase', letterSpacing: '.4px', paddingBottom: '4px', borderBottom: '1px solid #E2E6EA', marginTop: '6px' }}>Client</div>
+                  <div>
+                    <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Sélectionner depuis le carnet</label>
+                    <select onChange={e => {
+                      const client = clients.find(c => c.id === e.target.value)
+                      if (client) {
+                        const responsable = [client.contact_nom, client.contact_prenom].filter(Boolean).join(' ')
+                        setForm((f: any) => ({
+                          ...f,
+                          client_id: client.id,
+                          client_name: client.name,
+                          client_adresse: client.adresse || '',
+                          client_cp_ville: [client.cp, client.ville].filter(Boolean).join(' '),
+                          client_responsable: responsable,
+                          client_tel: client.contact_tel || '',
+                          client_mail: client.contact_mail || '',
+                        }))
+                      }
+                    }} style={{ width: '100%', padding: '7px 10px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}>
+                      <option value="">— Sélectionner un client —</option>
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
                   {[
                     ['Nom client', 'client_name', 'text', 'Ecole St Vincent'],
                     ['Adresse', 'client_adresse', 'text', '16 Place de l\'Eglise'],
