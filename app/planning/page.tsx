@@ -69,6 +69,9 @@ export default function Planning() {
   const [newTab, setNewTab] = useState('manuel')
   const [orderSearch, setOrderSearch] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [circuits, setCircuits] = useState([])
+  const [circuitSearch, setCircuitSearch] = useState('')
+  const [sendingPlanning, setSendingPlanning] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -77,6 +80,7 @@ export default function Planning() {
       loadDrivers()
       loadOrders()
       loadVehicles()
+      loadCircuits()
     }
     init()
   }, [])
@@ -104,6 +108,12 @@ export default function Planning() {
     const { data } = await supabase.from('vehicles').select('*')
       .eq('company_id', COMPANY_ID).eq('active', true).order('plate')
     setAllVehicles(data || [])
+  }
+
+  async function loadCircuits() {
+    const { data } = await supabase.from('circuits').select('*')
+      .eq('company_id', COMPANY_ID).order('nom')
+    setCircuits(data || [])
   }
 
   async function loadSlots() {
@@ -155,19 +165,128 @@ export default function Planning() {
     })
   }
 
-  function fillFromOrder(order) {
+  function timeToMin(t) {
+    if (!t) return 0
+    const [h, m] = t.split(':').map(Number)
+    return h * 60 + m
+  }
+  function minToTime(m) {
+    const h = Math.floor(m / 60) % 24
+    const min = m % 60
+    return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`
+  }
+
+  async function fillFromOrder(order) {
     setSelectedOrder(order)
-    setForm({
-      label: order.reference,
-      type: 'occasionnel',
-      start_time: '08:00',
-      end_time: '18:00',
-      from_label: order.origin || '',
-      to_label: order.destination || '',
-      vehicle: order.assigned_vehicle || order.vehicle_type || '',
-      notes: order.notes || `${order.passengers ? order.passengers + ' passagers\n' : ''}${order.distance_km ? order.distance_km + ' km estimés' : ''}`.trim(),
-    })
-    setNewTab('manuel')
+    // Utiliser les horaires réels de la commande
+    const depGarage  = order.heure_depart_garage  || '07:00'
+    const prise      = order.heure_prise_charge   || '08:00'
+    const dep        = order.heure_depart         || '08:30'
+    const retour     = order.heure_retour         || '17:00'
+    const retGarage  = order.heure_retour_garage  || '18:00'
+
+    const depGarMin  = timeToMin(depGarage)
+    const priseMin   = timeToMin(prise)
+    const retGarMin  = timeToMin(retGarage)
+    const retMin     = timeToMin(retour)
+
+    // Squelette automatique
+    const skeleton = [
+      { label: 'PDS',                  type: 'neutre',     color: '#9AA3B2', start_time: minToTime(depGarMin - 10), end_time: depGarage,   from_label: 'Garage Janzé',           to_label: 'Garage Janzé',          vehicle: order.vehicule_plaque || '', notes: '' },
+      { label: 'HLP',                  type: 'neutre',     color: '#9AA3B2', start_time: depGarage,                  end_time: minToTime(priseMin - 5),   from_label: 'Garage Janzé',           to_label: order.lieu_prise_charge || order.origin || '', vehicle: order.vehicule_plaque || '', notes: '' },
+      { label: 'MEP',                  type: 'neutre',     color: '#9AA3B2', start_time: minToTime(priseMin - 5),    end_time: prise,                     from_label: order.lieu_prise_charge || order.origin || '', to_label: order.lieu_prise_charge || order.origin || '', vehicle: order.vehicule_plaque || '', notes: '' },
+      { label: order.reference,        type: 'occasionnel',color: '#D4720A', start_time: dep,                        end_time: retour,                    from_label: order.lieu_prise_charge || order.origin || '', to_label: order.lieu_depose || order.destination || '', vehicle: order.vehicule_plaque || '', notes: order.notes || '' },
+      { label: 'HLP retour',           type: 'neutre',     color: '#9AA3B2', start_time: retour,                     end_time: minToTime(retGarMin - 10), from_label: order.lieu_depose || order.destination || '', to_label: 'Garage Janzé',          vehicle: order.vehicule_plaque || '', notes: '' },
+      { label: 'FDS',                  type: 'neutre',     color: '#9AA3B2', start_time: minToTime(retGarMin - 10),  end_time: retGarage,                 from_label: 'Garage Janzé',           to_label: 'Garage Janzé',          vehicle: order.vehicule_plaque || '', notes: '' },
+    ]
+
+    setSaving(true)
+    const { driverId, date } = panel
+    const planKey = `${driverId}_${dateKey(date)}`
+    let planning = plannings[planKey]
+    if (!planning) {
+      const { data: newPlan, error } = await supabase.from('planning').insert({
+        id: generateId(), company_id: COMPANY_ID, driver_id: driverId,
+        date: dateKey(date), day_type: 'Occasionnel', day_color: '#D4720A',
+      }).select().single()
+      if (error) { setMessage('Erreur planning : ' + error.message); setSaving(false); return }
+      planning = newPlan
+      setPlannings(prev => ({ ...prev, [planKey]: planning }))
+    }
+
+    for (const slot of skeleton) {
+      await supabase.from('slots').insert({
+        id: generateId(), company_id: COMPANY_ID, planning_id: planning.id,
+        label: slot.label, type: slot.type, color: slot.color,
+        start_time: slot.start_time, end_time: slot.end_time,
+        from_label: slot.from_label, to_label: slot.to_label,
+        vehicle: slot.vehicle, notes: slot.notes,
+      })
+    }
+
+    await supabase.from('orders').update({
+      status: 'affecte', assigned_driver: driverId, assigned_vehicle: order.vehicule_plaque || '',
+    }).eq('id', order.id)
+
+    setSaving(false)
+    setMessage('✅ Squelette de journée créé !')
+    setTimeout(() => { setMessage(''); setPanel(null); loadSlots(); loadOrders() }, 1500)
+  }
+
+  async function fillFromCircuit(circuit) {
+    setSaving(true)
+    const { driverId, date } = panel
+    const planKey = `${driverId}_${dateKey(date)}`
+    let planning = plannings[planKey]
+    if (!planning) {
+      const { data: newPlan, error } = await supabase.from('planning').insert({
+        id: generateId(), company_id: COMPANY_ID, driver_id: driverId,
+        date: dateKey(date), day_type: 'Scolaire', day_color: '#1A2130',
+      }).select().single()
+      if (error) { setMessage('Erreur : ' + error.message); setSaving(false); return }
+      planning = newPlan
+      setPlannings(prev => ({ ...prev, [planKey]: planning }))
+    }
+
+    const debut = circuit.heure_debut || '07:00'
+    const fin   = circuit.heure_fin   || '08:30'
+    const debMin = timeToMin(debut)
+    const finMin = timeToMin(fin)
+
+    const skeleton = [
+      { label: 'PDS',         type: 'neutre',   color: '#9AA3B2', start_time: minToTime(debMin - 20), end_time: minToTime(debMin - 10), from_label: 'Garage Janzé', to_label: 'Garage Janzé', vehicle: '', notes: '' },
+      { label: 'HLP',         type: 'neutre',   color: '#9AA3B2', start_time: minToTime(debMin - 10), end_time: debut,                  from_label: 'Garage Janzé', to_label: circuit.nom || '', vehicle: '', notes: '' },
+      { label: circuit.nom || circuit.id, type: 'scolaire', color: '#1A2130', start_time: debut, end_time: fin, from_label: circuit.nom || '', to_label: circuit.nom || '', vehicle: '', notes: '' },
+      { label: 'FDS',         type: 'neutre',   color: '#9AA3B2', start_time: fin,                   end_time: minToTime(finMin + 10),  from_label: circuit.nom || '', to_label: 'Garage Janzé', vehicle: '', notes: '' },
+    ]
+
+    for (const slot of skeleton) {
+      await supabase.from('slots').insert({
+        id: generateId(), company_id: COMPANY_ID, planning_id: planning.id,
+        label: slot.label, type: slot.type, color: slot.color,
+        start_time: slot.start_time, end_time: slot.end_time,
+        from_label: slot.from_label, to_label: slot.to_label,
+        vehicle: slot.vehicle, notes: slot.notes,
+      })
+    }
+
+    setSaving(false)
+    setMessage('✅ Circuit scolaire ajouté !')
+    setTimeout(() => { setMessage(''); setPanel(null); loadSlots() }, 1500)
+  }
+
+  async function handleSendPlanning() {
+    setSendingPlanning(true)
+    const dates = getWeekDates(weekOffset + 1) // semaine suivante
+    const from = dateKey(dates[0])
+    const to   = dateKey(dates[6])
+    const { error } = await supabase.from('planning')
+      .update({ valide: true, valide_at: new Date().toISOString() })
+      .eq('company_id', COMPANY_ID)
+      .gte('date', from).lte('date', to)
+    setSendingPlanning(false)
+    if (error) alert('Erreur : ' + error.message)
+    else alert(`✅ Planning du ${dates[0].toLocaleDateString('fr-FR')} au ${dates[6].toLocaleDateString('fr-FR')} envoyé aux conducteurs !`)
   }
 
   async function handleCreateSlot() {
@@ -246,6 +365,12 @@ export default function Planning() {
         <button onClick={() => setWeekOffset(0)} style={{ background: '#2EC971', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 12px', borderRadius: '5px', cursor: 'pointer' }}>
           Aujourd'hui
         </button>
+        <div style={{ marginLeft: 'auto' }}>
+          <button onClick={handleSendPlanning} disabled={sendingPlanning}
+            style={{ background: sendingPlanning ? '#8A95A3' : '#0E5AA7', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 14px', borderRadius: '5px', cursor: 'pointer' }}>
+            {sendingPlanning ? '⏳ Envoi…' : '📤 Envoyer planning semaine suivante'}
+          </button>
+        </div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -343,7 +468,7 @@ export default function Planning() {
               {panel.type === 'new' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', background: '#F0F2F5', borderRadius: '7px', padding: '3px', gap: '2px' }}>
-                    {[['manuel','✏️ Manuel'], ['commande', `📋 Depuis commande ${orders.length > 0 ? `(${orders.length})` : ''}`]].map(([tab, label]) => (
+                    {[['manuel','✏️ Manuel'], ['commande', `📋 Commande (${orders.length})`], ['circuit', `🏫 Scolaire (${circuits.length})`]].map(([tab, label]) => (
                       <button key={tab} onClick={() => setNewTab(tab)}
                         style={{ flex: 1, background: newTab === tab ? 'white' : 'transparent', border: 'none', fontFamily: 'inherit', fontSize: '10px', fontWeight: newTab === tab ? '700' : '500', color: newTab === tab ? '#1A2130' : '#8A95A3', padding: '5px 6px', borderRadius: '5px', cursor: 'pointer', boxShadow: newTab === tab ? '0 1px 3px rgba(0,0,0,.1)' : 'none' }}>
                         {label}
@@ -358,11 +483,13 @@ export default function Planning() {
                         <input value={orderSearch} onChange={e => setOrderSearch(e.target.value)} placeholder="Référence ou destination…"
                           style={{ border: 'none', outline: 'none', fontFamily: 'inherit', fontSize: '11px', width: '100%', background: 'none' }} />
                       </div>
+                      {saving && <div style={{ textAlign: 'center', color: '#0E5AA7', fontSize: '11px', padding: '10px' }}>⏳ Création du squelette…</div>}
+                      {message && <div style={{ background: '#E8F5E9', border: '1px solid #A5D6A7', borderRadius: '5px', padding: '8px 10px', fontSize: '11px', color: '#1B5E20' }}>{message}</div>}
                       {filteredOrders.length === 0 ? (
                         <div style={{ textAlign: 'center', color: '#8A95A3', fontSize: '11px', padding: '20px' }}>Aucune commande confirmée disponible</div>
                       ) : (
                         filteredOrders.map(order => (
-                          <div key={order.id} onClick={() => fillFromOrder(order)}
+                          <div key={order.id} onClick={() => { if (!saving) fillFromOrder(order) }}
                             style={{ background: '#F8F9FB', border: '1px solid #D0D4DA', borderRadius: '7px', padding: '10px 12px', cursor: 'pointer' }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#0E5AA7'; e.currentTarget.style.background = '#E8F0FB' }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0D4DA'; e.currentTarget.style.background = '#F8F9FB' }}>
@@ -377,6 +504,29 @@ export default function Planning() {
                           </div>
                         ))
                       )}
+                    </div>
+                  )}
+
+                  {newTab === 'circuit' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ background: '#F8F9FB', border: '1px solid #D0D4DA', borderRadius: '5px', padding: '6px 10px', display: 'flex', gap: '6px' }}>
+                        <span style={{ color: '#8A95A3' }}>🔍</span>
+                        <input value={circuitSearch} onChange={e => setCircuitSearch(e.target.value)} placeholder="Nom du circuit…"
+                          style={{ border: 'none', outline: 'none', fontFamily: 'inherit', fontSize: '11px', width: '100%', background: 'none' }} />
+                      </div>
+                      {saving && <div style={{ textAlign: 'center', color: '#0E5AA7', fontSize: '11px', padding: '10px' }}>⏳ Création du squelette…</div>}
+                      {message && <div style={{ background: '#E8F5E9', border: '1px solid #A5D6A7', borderRadius: '5px', padding: '8px 10px', fontSize: '11px', color: '#1B5E20' }}>{message}</div>}
+                      {circuits.filter(c => !circuitSearch || c.nom?.toLowerCase().includes(circuitSearch.toLowerCase())).map(circuit => (
+                        <div key={circuit.id} onClick={() => fillFromCircuit(circuit)}
+                          style={{ background: '#F8F9FB', border: '1px solid #D0D4DA', borderRadius: '7px', padding: '10px 12px', cursor: 'pointer' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#1A2130'; e.currentTarget.style.background = '#E8EAF0' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0D4DA'; e.currentTarget.style.background = '#F8F9FB' }}>
+                          <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>{circuit.nom}</div>
+                          {circuit.heure_debut && <div style={{ fontSize: '10px', color: '#8A95A3', marginTop: '2px' }}>🕐 {circuit.heure_debut} → {circuit.heure_fin || '—'}</div>}
+                          <div style={{ fontSize: '10px', color: '#1A2130', fontWeight: '600', marginTop: '5px' }}>→ Cliquer pour ajouter avec squelette PDS/HLP/FDS</div>
+                        </div>
+                      ))}
+                      {circuits.length === 0 && <div style={{ textAlign: 'center', color: '#8A95A3', fontSize: '11px', padding: '20px' }}>Aucun circuit scolaire</div>}
                     </div>
                   )}
 
