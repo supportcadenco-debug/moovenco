@@ -527,6 +527,67 @@ export default function Personnel() {
                       )}
                     </div>
                   )}
+
+                  {/* CIRCUITS HABITUELS */}
+                  {selected.role === 'conducteur' && (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>🏫 Circuits habituels</div>
+                        <button onClick={() => setEditingCircuits(!editingCircuits)}
+                          style={{ background: editingCircuits ? '#FFEBEE' : '#E8F0FB', border: 'none', color: editingCircuits ? '#C62828' : '#0E5AA7', fontFamily: 'inherit', fontSize: '10px', fontWeight: '600', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>
+                          {editingCircuits ? '✕ Fermer' : '✏️ Modifier'}
+                        </button>
+                      </div>
+
+                      {driverCircuits.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#8A95A3', fontSize: '11px', padding: '12px', background: '#F8F9FB', borderRadius: '8px', marginBottom: '8px' }}>
+                          Aucun circuit habituel assigné
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                          {driverCircuits.map(dc => (
+                            <div key={dc.id} style={{ background: '#E8EAF0', borderRadius: '6px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>
+                                  {dc.circuits?.code && <span style={{ color: '#0E5AA7', marginRight: '5px' }}>{dc.circuits.code}</span>}
+                                  {dc.circuits?.name || '—'}
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#8A95A3', marginTop: '2px' }}>
+                                  {dc.circuits?.heure_debut ? `🕐 ${dc.circuits.heure_debut} → ${dc.circuits.heure_fin || '—'}` : '⚠️ Heures non renseignées'}
+                                </div>
+                                <div style={{ display: 'flex', gap: '3px', marginTop: '4px', flexWrap: 'wrap' }}>
+                                  {['lundi','mardi','mercredi','jeudi','vendredi'].map(j => (
+                                    <span key={j} style={{ fontSize: '9px', fontWeight: '700', padding: '1px 5px', borderRadius: '4px', background: dc.jours?.includes(j) ? '#1A2130' : '#D0D4DA', color: dc.jours?.includes(j) ? 'white' : '#8A95A3' }}>
+                                      {j.slice(0,3).toUpperCase()}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              {editingCircuits && (
+                                <button onClick={() => removeDriverCircuit(dc.id)}
+                                  style={{ background: 'none', border: 'none', color: '#C62828', cursor: 'pointer', fontSize: '14px' }}>🗑</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {editingCircuits && (
+                        circuits.length > 0 ? (
+                          <CircuitAssigner
+                            circuits={circuits}
+                            driverCircuits={driverCircuits}
+                            onAdd={addDriverCircuit}
+                            saving={savingCircuit}
+                          />
+                        ) : (
+                          <div style={{ fontSize: '10px', color: '#8A95A3', textAlign: 'center', padding: '8px', background: '#F8F9FB', borderRadius: '6px' }}>
+                            Aucun circuit disponible — créez des circuits dans le module Scolaire
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
