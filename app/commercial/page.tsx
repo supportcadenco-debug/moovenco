@@ -41,6 +41,8 @@ export default function Commercial() {
   const [search, setSearch] = useState('')
   const [generatingBC, setGeneratingBC] = useState(false)
   const [drivers, setDrivers] = useState<any[]>([])
+  const [orderDocs, setOrderDocs] = useState<any[]>([])
+  const [uploadingDoc, setUploadingDoc] = useState(false)
   const [clients, setClients] = useState<any[]>([])
 
   useEffect(() => { loadOrders(); loadDrivers(); loadClients() }, [])
@@ -419,6 +421,44 @@ export default function Commercial() {
 
   const s = (key: string) => ({ target: { value } }: any) => setForm((f: any) => ({ ...f, [key]: value }))
 
+  const DOC_CATS_COMMERCIAL = [
+    { key: 'devis_signe',  label: '✍️ Devis signé' },
+    { key: 'bc',           label: '📋 Bon de commande' },
+    { key: 'facture',      label: '🧾 Facture' },
+    { key: 'autre',        label: '📎 Autre' },
+  ]
+
+  async function loadOrderDocs(orderId) {
+    const { data } = await supabase.from('module_documents').select('*')
+      .eq('entity_id', orderId).order('created_at', { ascending: false })
+    setOrderDocs(data || [])
+  }
+
+  async function uploadOrderDoc(file: File, categorie: string) {
+    if (!file || !selected) return
+    setUploadingDoc(true)
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `commercial/${selected.id}/${Date.now()}_${safeName}`
+      const { error: upErr } = await supabase.storage.from('driver-documents').upload(path, file, { upsert: false })
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('driver-documents').getPublicUrl(path)
+        await supabase.from('module_documents').insert({
+          company_id: COMPANY_ID, module: 'commercial', entity_id: selected.id,
+          nom: file.name, categorie, url: urlData.publicUrl, taille: file.size,
+        })
+        await loadOrderDocs(selected.id)
+      }
+    } catch(e) { console.error(e) }
+    setUploadingDoc(false)
+  }
+
+  async function deleteOrderDoc(doc: any) {
+    if (!confirm('Supprimer ?')) return
+    await supabase.from('module_documents').delete().eq('id', doc.id)
+    setOrderDocs(prev => prev.filter((d: any) => d.id !== doc.id))
+  }
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
 
@@ -479,7 +519,7 @@ export default function Commercial() {
                     const st = STATUS[order.status] || STATUS.devis
                     return (
                       <tr key={order.id} style={{ borderBottom: '1px solid #F0F2F5', background: i % 2 === 0 ? 'white' : '#FAFBFC', cursor: 'pointer' }}
-                        onClick={() => { setSelected(order); setShowForm(false) }}
+                        onClick={() => { setSelected(order); setShowForm(false); loadOrderDocs(order.id) }}
                         onMouseEnter={e => e.currentTarget.style.background = '#F5F7FA'}
                         onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#FAFBFC'}>
                         <td style={{ padding: '10px 12px', fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>{order.reference}</td>
@@ -683,6 +723,38 @@ export default function Commercial() {
                       <div style={{ fontSize: '11px', color: '#4A5568', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{selected.notes}</div>
                     </div>
                   )}
+
+                  {/* DOCUMENTS DE LA COMMANDE */}
+                  <div style={{ marginTop: '14px', borderTop: '1px solid #E2E6EA', paddingTop: '12px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '10px' }}>📎 Documents</div>
+                    {DOC_CATS_COMMERCIAL.map(cat => {
+                      const catDocs = orderDocs.filter((d: any) => d.categorie === cat.key)
+                      return (
+                        <div key={cat.key} style={{ marginBottom: '10px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '10px', fontWeight: '600', color: '#8A95A3' }}>{cat.label}</div>
+                            <label style={{ background: uploadingDoc ? '#8A95A3' : '#E8F0FB', color: '#0E5AA7', fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '4px', cursor: uploadingDoc ? 'not-allowed' : 'pointer' }}>
+                              {uploadingDoc ? '⏳' : '+ Ajouter'}
+                              <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} disabled={uploadingDoc}
+                                onChange={e => { if (e.target.files?.[0]) uploadOrderDoc(e.target.files[0], cat.key) }} />
+                            </label>
+                          </div>
+                          {catDocs.length === 0 ? (
+                            <div style={{ fontSize: '10px', color: '#8A95A3', padding: '5px 8px', background: '#F8F9FB', borderRadius: '4px' }}>Aucun document</div>
+                          ) : catDocs.map((doc: any) => (
+                            <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 8px', background: 'white', border: '1px solid #E2E6EA', borderRadius: '4px', marginBottom: '3px' }}>
+                              <span>{doc.nom?.endsWith('.pdf') ? '📄' : '🖼️'}</span>
+                              <a href={doc.url} target="_blank" rel="noreferrer"
+                                style={{ flex: 1, fontSize: '11px', fontWeight: '600', color: '#0E5AA7', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {doc.nom}
+                              </a>
+                              <button onClick={() => deleteOrderDoc(doc)} style={{ background: 'none', border: 'none', color: '#C62828', cursor: 'pointer', fontSize: '13px' }}>🗑</button>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
 
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
