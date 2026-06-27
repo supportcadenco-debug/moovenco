@@ -967,6 +967,8 @@ export default function Planning() {
             loadSlots()
           }}
           onClose={() => { setGantt(null); loadSlots() }}
+          onEnvoiJour={() => envoiJourConducteur(gantt.driver.id, gantt.date)}
+          sendingPlanning={sendingPlanning}
         />
       )}
     </div>

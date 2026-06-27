@@ -34,7 +34,7 @@ function minToTime(m) {
 const TOTAL_MIN = 24 * 60
 const HOUR_W = 60 // px par heure
 
-export default function DayGantt({ driver, date, slots, vehicles, onAddSlot, onDeleteSlot, onClose }) {
+export default function DayGantt({ driver, date, slots, vehicles, onAddSlot, onDeleteSlot, onClose, onEnvoiJour, sendingPlanning }) {
   const [form, setForm] = useState(null)
   const [filterClimatise, setFilterClimatise] = useState(false)
   const [autoNeutral, setAutoNeutral] = useState(true)
@@ -129,6 +129,12 @@ export default function DayGantt({ driver, date, slots, vehicles, onAddSlot, onD
             <div style={{ fontSize: '11px', color: '#8A95A3' }}>{dateStr}</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {onEnvoiJour && (
+              <button onClick={onEnvoiJour} disabled={sendingPlanning}
+                style={{ background: sendingPlanning ? '#8A95A3' : '#1A9E50', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '6px 12px', borderRadius: '5px', cursor: 'pointer' }}>
+                {sendingPlanning ? '⏳ Envoi…' : '📤 Envoyer ce jour'}
+              </button>
+            )}
             <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#4A5568', cursor: 'pointer' }}>
               <input type="checkbox" checked={autoNeutral} onChange={e => setAutoNeutral(e.target.checked)} />
               Auto PDS/HLP/MEP/FDS
@@ -290,7 +296,7 @@ export default function DayGantt({ driver, date, slots, vehicles, onAddSlot, onD
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                       {SLOT_TYPES.map(t => (
                         <button key={t.value} onClick={() => setForm(f => ({ ...f, type: t.value }))}
-                          style={{ background: form.type === t.value ? t.color : '#F8F9FB', color: form.type === t.value ? 'white' : '#4A5568', border: `1px solid ${form.type === t.value ? t.color : '#D0D4DA'}`, fontFamily: 'inherit', fontSize: '9px', fontWeight: '600', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>
+                          style={{ background: form.type === t.value ? t.color : 'white', color: form.type === t.value ? 'white' : t.color, border: `2px solid ${t.color}`, fontFamily: 'inherit', fontSize: '9px', fontWeight: '700', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', opacity: 1 }}>
                           {t.label}
                         </button>
                       ))}
