@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import Navbar from '../../src/components/Navbar'
@@ -11,7 +11,6 @@ const ROLES = [
   { value: 'directeur', label: 'Directeur / Gérant', color: '#1A2130' },
   { value: 'exploitant', label: 'Exploitant', color: '#0E5AA7' },
   { value: 'commercial', label: 'Commercial', color: '#7B1FA2' },
-  { value: 'conducteur', label: 'Conducteur', color: '#1A9E50' },
   { value: 'mecanicien', label: 'Mécanicien', color: '#D4720A' },
   { value: 'secretaire', label: 'Secrétaire / Comptable', color: '#1565C0' },
 ]
@@ -22,7 +21,6 @@ const MODULES = [
   { value: 'commercial', label: '💼 Commercial' },
   { value: 'vehicules',  label: '🚌 Véhicules' },
   { value: 'atelier',    label: '🔧 Atelier' },
-  { value: 'documents',  label: '📄 Documents' },
   { value: 'anomalies',  label: '⚠️ Anomalies' },
 ]
 
@@ -38,7 +36,7 @@ export default function Permissions() {
   const [permissions, setPermissions] = useState({})
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
-  const [selectedRole, setSelectedRole] = useState('conducteur')
+  const [selectedRole, setSelectedRole] = useState('exploitant')
 
   useEffect(() => { loadPermissions() }, [])
 
