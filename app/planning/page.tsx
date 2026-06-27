@@ -437,7 +437,9 @@ export default function Planning() {
     ]
 
     setSaving(true)
-    const { driverId, date } = panel
+    const driverId = gantt?.driver?.id || panel?.driverId
+    const date = gantt?.date || panel?.date
+    if (!driverId || !date) { setSaving(false); return }
     const planKey = `${driverId}_${dateKey(date)}`
     let planning = plannings[planKey]
     if (!planning) {
