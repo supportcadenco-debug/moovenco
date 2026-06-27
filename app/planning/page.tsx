@@ -969,6 +969,13 @@ export default function Planning() {
           onClose={() => { setGantt(null); loadSlots() }}
           onEnvoiJour={() => envoiJourConducteur(gantt.driver.id, gantt.date)}
           sendingPlanning={sendingPlanning}
+          orders={orders}
+          circuits={circuits}
+          onFillFromOrder={(order) => {
+            setGantt(g => ({ ...g }))
+            fillFromOrder(order)
+          }}
+          onFillFromCircuit={(circuit) => fillFromCircuit(circuit)}
         />
       )}
     </div>

@@ -34,10 +34,13 @@ function minToTime(m) {
 const TOTAL_MIN = 24 * 60
 const HOUR_W = 60 // px par heure
 
-export default function DayGantt({ driver, date, slots, vehicles, onAddSlot, onDeleteSlot, onClose, onEnvoiJour, sendingPlanning }) {
+export default function DayGantt({ driver, date, slots, vehicles, orders, circuits, onAddSlot, onDeleteSlot, onClose, onEnvoiJour, sendingPlanning, onFillFromOrder, onFillFromCircuit }) {
   const [form, setForm] = useState(null)
   const [filterClimatise, setFilterClimatise] = useState(false)
   const [autoNeutral, setAutoNeutral] = useState(true)
+  const [formTab, setFormTab] = useState('manuel') // manuel | commande | scolaire
+  const [orderSearch, setOrderSearch] = useState('')
+  const [circuitSearch, setCircuitSearch] = useState('')
 
   const totalW = HOUR_W * 24
 
@@ -259,9 +262,19 @@ export default function DayGantt({ driver, date, slots, vehicles, onAddSlot, onD
           {/* FORMULAIRE */}
           {form && (
             <div style={{ width: '280px', minWidth: '280px', borderLeft: '1px solid #E2E6EA', padding: '14px', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#1A2130' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: '#1A2130', marginBottom: '4px' }}>
                 {form.readonly ? '📋 Détail créneau' : '✏️ Nouveau créneau'}
               </div>
+              {!form.readonly && (
+                <div style={{ display: 'flex', background: '#F0F2F5', borderRadius: '6px', padding: '2px', gap: '2px', marginBottom: '2px' }}>
+                  {[['manuel','✏️'],['commande','📋'],['scolaire','🏫']].map(([tab, icon]) => (
+                    <button key={tab} onClick={() => setFormTab(tab)}
+                      style={{ flex: 1, background: formTab === tab ? 'white' : 'transparent', border: 'none', fontFamily: 'inherit', fontSize: '9px', fontWeight: formTab === tab ? '700' : '500', color: formTab === tab ? '#1A2130' : '#8A95A3', padding: '4px 2px', borderRadius: '4px', cursor: 'pointer' }}>
+                      {icon} {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {form.readonly ? (
                 <>
@@ -283,6 +296,39 @@ export default function DayGantt({ driver, date, slots, vehicles, onAddSlot, onD
                     Fermer
                   </button>
                 </>
+              ) : formTab === 'commande' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <input value={orderSearch} onChange={e => setOrderSearch(e.target.value)} placeholder="🔍 Référence ou destination…"
+                    style={{ padding: '6px 8px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit' }} />
+                  {(orders || []).filter(o => !orderSearch || o.reference?.toLowerCase().includes(orderSearch.toLowerCase()) || o.destination?.toLowerCase().includes(orderSearch.toLowerCase())).map(order => (
+                    <div key={order.id} onClick={() => { if (onFillFromOrder) onFillFromOrder(order); setFormTab('manuel') }}
+                      style={{ background: '#F8F9FB', border: '1px solid #D0D4DA', borderRadius: '6px', padding: '8px 10px', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#0E5AA7'; e.currentTarget.style.background = '#E8F0FB' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0D4DA'; e.currentTarget.style.background = '#F8F9FB' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>{order.reference}</div>
+                      <div style={{ fontSize: '10px', color: '#4A5568' }}>📍 {order.destination}</div>
+                      {order.date_service && <div style={{ fontSize: '10px', color: '#8A95A3' }}>📅 {new Date(order.date_service + 'T00:00:00').toLocaleDateString('fr-FR')}</div>}
+                      <div style={{ fontSize: '10px', color: '#0E5AA7', fontWeight: '600', marginTop: '4px' }}>→ Générer le squelette</div>
+                    </div>
+                  ))}
+                  {(orders || []).length === 0 && <div style={{ textAlign: 'center', color: '#8A95A3', fontSize: '11px', padding: '16px' }}>Aucune commande confirmée</div>}
+                </div>
+              ) : formTab === 'scolaire' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <input value={circuitSearch} onChange={e => setCircuitSearch(e.target.value)} placeholder="🔍 Nom du circuit…"
+                    style={{ padding: '6px 8px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit' }} />
+                  {(circuits || []).filter(c => !circuitSearch || c.name?.toLowerCase().includes(circuitSearch.toLowerCase())).map(circuit => (
+                    <div key={circuit.id} onClick={() => { if (onFillFromCircuit) onFillFromCircuit(circuit); setForm(null) }}
+                      style={{ background: '#F8F9FB', border: '1px solid #D0D4DA', borderRadius: '6px', padding: '8px 10px', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#1A2130'; e.currentTarget.style.background = '#E8EAF0' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0D4DA'; e.currentTarget.style.background = '#F8F9FB' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>{circuit.code ? `[${circuit.code}] ` : ''}{circuit.name}</div>
+                      {circuit.heure_debut && <div style={{ fontSize: '10px', color: '#8A95A3' }}>🕐 {circuit.heure_debut} → {circuit.heure_fin || '—'}</div>}
+                      <div style={{ fontSize: '10px', color: '#1A2130', fontWeight: '600', marginTop: '4px' }}>→ Ajouter avec PDS/HLP/FDS</div>
+                    </div>
+                  ))}
+                  {(circuits || []).length === 0 && <div style={{ textAlign: 'center', color: '#8A95A3', fontSize: '11px', padding: '16px' }}>Aucun circuit disponible</div>}
+                </div>
               ) : (
                 <>
                   <div>
