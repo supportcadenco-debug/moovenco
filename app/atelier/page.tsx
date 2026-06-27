@@ -157,37 +157,6 @@ export default function Atelier() {
   const si = (key) => ({ target: { value } }) => setIntForm(f => ({ ...f, [key]: value }))
   const filtered = vehicles.filter(v => !search || v.plate.toLowerCase().includes(search.toLowerCase()) || v.name?.toLowerCase().includes(search.toLowerCase()))
 
-  async function loadVehDocs(vehicleId) {
-    const { data } = await supabase.from('module_documents').select('*')
-      .eq('entity_id', vehicleId).order('created_at', { ascending: false })
-    setVehDocs(data || [])
-  }
-
-  async function uploadVehDoc(file, categorie) {
-    if (!file || !selected) return
-    setUploadingDoc(true)
-    try {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const path = `atelier/${selected.id}/${Date.now()}_${safeName}`
-      const { error: upErr } = await supabase.storage.from('driver-documents').upload(path, file, { upsert: false })
-      if (!upErr) {
-        const { data: urlData } = supabase.storage.from('driver-documents').getPublicUrl(path)
-        await supabase.from('module_documents').insert({
-          company_id: COMPANY_ID, module: 'atelier', entity_id: selected.id,
-          nom: file.name, categorie, url: urlData.publicUrl, taille: file.size,
-        })
-        await loadVehDocs(selected.id)
-      }
-    } catch(e) { console.error(e) }
-    setUploadingDoc(false)
-  }
-
-  async function deleteVehDoc(doc) {
-    if (!confirm('Supprimer ?')) return
-    await supabase.from('module_documents').delete().eq('id', doc.id)
-    setVehDocs(prev => prev.filter(d => d.id !== doc.id))
-  }
-
   const DOC_CATS_VEHICULE = [
     { key: 'carte_grise',  label: '📋 Carte grise' },
     { key: 'assurance',    label: '🛡️ Assurance' },
