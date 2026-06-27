@@ -57,6 +57,8 @@ export default function Atelier() {
   const [search, setSearch] = useState('')
   const [reading, setReading] = useState(false)
   const fileRef = useRef(null)
+  const [drivers, setDrivers] = useState([])
+  const [assigningDriver, setAssigningDriver] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -192,6 +194,54 @@ export default function Atelier() {
     if (!confirm('Supprimer ?')) return
     await supabase.from('module_documents').delete().eq('id', doc.id)
     setVehDocs(prev => prev.filter(d => d.id !== doc.id))
+  }
+
+  const DOC_CATS_VEHICULE = [
+    { key: 'carte_grise',  label: '📋 Carte grise' },
+    { key: 'assurance',    label: '🛡️ Assurance' },
+    { key: 'ct',           label: '🔍 Contrôle technique' },
+    { key: 'tachygraphe',  label: '⏱️ Tachygraphe' },
+    { key: 'autre',        label: '📎 Autre' },
+  ]
+
+  async function loadVehDocs(vehicleId) {
+    const { data } = await supabase.from('module_documents').select('*')
+      .eq('entity_id', vehicleId).order('created_at', { ascending: false })
+    setVehDocs(data || [])
+  }
+
+  async function uploadVehDoc(file, categorie) {
+    if (!file || !selected) return
+    setUploadingDoc(true)
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `atelier/${selected.id}/${Date.now()}_${safeName}`
+      const { error: upErr } = await supabase.storage.from('driver-documents').upload(path, file, { upsert: false })
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('driver-documents').getPublicUrl(path)
+        await supabase.from('module_documents').insert({
+          company_id: COMPANY_ID, module: 'atelier', entity_id: selected.id,
+          nom: file.name, categorie, url: urlData.publicUrl, taille: file.size,
+        })
+        await loadVehDocs(selected.id)
+      }
+    } catch(e) { console.error(e) }
+    setUploadingDoc(false)
+  }
+
+  async function deleteVehDoc(doc) {
+    if (!confirm('Supprimer ?')) return
+    await supabase.from('module_documents').delete().eq('id', doc.id)
+    setVehDocs(prev => prev.filter(d => d.id !== doc.id))
+  }
+
+  async function assignDriver(driverId) {
+    if (!selected) return
+    setAssigningDriver(true)
+    await supabase.from('vehicles').update({ assigned_driver: driverId || null }).eq('id', selected.id)
+    setSelected(s => ({ ...s, assigned_driver: driverId }))
+    await loadAll()
+    setAssigningDriver(false)
   }
 
   return (
@@ -439,6 +489,51 @@ export default function Atelier() {
                     </tbody>
                   </table>
                 )}
+              </div>
+              {/* CONDUCTEUR ASSIGNÉ */}
+              <div style={{ background: 'white', borderRadius: '10px', padding: '14px 16px', marginBottom: '12px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '10px' }}>👤 Conducteur assigné</div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <select value={selected.assigned_driver || ''} onChange={e => assignDriver(e.target.value)}
+                    style={{ flex: 1, padding: '7px 10px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit' }}>
+                    <option value="">— Non assigné —</option>
+                    {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                  {assigningDriver && <span style={{ fontSize: '11px', color: '#8A95A3' }}>⏳</span>}
+                </div>
+              </div>
+
+              {/* DOCUMENTS DU VÉHICULE */}
+              <div style={{ background: 'white', borderRadius: '10px', padding: '14px 16px', marginBottom: '12px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '10px' }}>📎 Documents véhicule</div>
+                {DOC_CATS_VEHICULE.map(cat => {
+                  const catDocs = vehDocs.filter(d => d.categorie === cat.key)
+                  return (
+                    <div key={cat.key} style={{ marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: '600', color: '#8A95A3' }}>{cat.label}</div>
+                        <label style={{ background: uploadingDoc ? '#8A95A3' : '#E8F0FB', color: '#0E5AA7', fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '4px', cursor: uploadingDoc ? 'not-allowed' : 'pointer' }}>
+                          {uploadingDoc ? '⏳' : '+ Ajouter'}
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} disabled={uploadingDoc}
+                            onChange={e => { if (e.target.files?.[0]) uploadVehDoc(e.target.files[0], cat.key) }} />
+                        </label>
+                      </div>
+                      {catDocs.length === 0 ? (
+                        <div style={{ fontSize: '10px', color: '#8A95A3', padding: '5px 8px', background: '#F8F9FB', borderRadius: '4px' }}>Aucun document</div>
+                      ) : catDocs.map(doc => (
+                        <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 8px', background: 'white', border: '1px solid #E2E6EA', borderRadius: '4px', marginBottom: '3px' }}>
+                          <span>{doc.nom?.endsWith('.pdf') ? '📄' : '🖼️'}</span>
+                          <a href={doc.url} target="_blank" rel="noreferrer"
+                            style={{ flex: 1, fontSize: '11px', fontWeight: '600', color: '#0E5AA7', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {doc.nom}
+                          </a>
+                          <span style={{ fontSize: '10px', color: '#8A95A3' }}>{new Date(doc.created_at).toLocaleDateString('fr-FR')}</span>
+                          <button onClick={() => deleteVehDoc(doc)} style={{ background: 'none', border: 'none', color: '#C62828', cursor: 'pointer', fontSize: '13px' }}>🗑</button>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
               </div>
             </>
           )}
