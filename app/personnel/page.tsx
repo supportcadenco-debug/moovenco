@@ -90,7 +90,7 @@ export default function Personnel() {
   const [selected, setSelected] = useState(null)
   const [filterRole, setFilterRole] = useState('tous')
   const [search, setSearch] = useState('')
-  const [form, setForm] = useState({ name: '', initials: '', color: '#0E5AA7', role: 'conducteur', contract: '' })
+  const [form, setForm] = useState({ name: '', initials: '', color: '#0E5AA7', role: 'conducteur', contract: '', email: '', password: '' })
   const [driverForm, setDriverForm] = useState({
     permis: [], fimo_expiry: '', fco_expiry: '', visite_medicale: '',
     carte_conducteur: '', vehicle_habituel: '', dispo_vacances: false, notes: ''
@@ -157,16 +157,40 @@ export default function Personnel() {
 
   async function handleSave() {
     if (!form.name || !form.role) { setMessage('Nom et rôle obligatoires'); return }
+    if (form.role === 'conducteur' && (!form.email || !form.password)) {
+      setMessage('Email et mot de passe obligatoires pour un conducteur'); return
+    }
     setSaving(true)
+
+    let profileId = generateId()
+
+    // Si conducteur → créer compte Auth d'abord pour avoir le bon UUID
+    if (form.role === 'conducteur' && form.email) {
+      const { data: authData, error: authErr } = await supabase.auth.admin
+        ? await supabase.auth.admin.createUser({ email: form.email, password: form.password, email_confirm: true })
+        : { data: null, error: { message: 'Admin API non disponible' } }
+
+      if (authErr) {
+        // Fallback : créer via signUp (moins propre mais fonctionnel)
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+          email: form.email, password: form.password,
+        })
+        if (signUpErr) { setMessage('Erreur Auth : ' + signUpErr.message); setSaving(false); return }
+        if (signUpData?.user?.id) profileId = signUpData.user.id
+      } else if (authData?.user?.id) {
+        profileId = authData.user.id
+      }
+    }
+
     const { error } = await supabase.from('profiles').insert({
-      id: generateId(), company_id: COMPANY_ID,
+      id: profileId, company_id: COMPANY_ID,
       name: form.name, initials: form.initials, color: form.color,
       role: form.role, contract: form.contract, active: true,
     })
     if (error) setMessage('Erreur : ' + error.message)
     else {
-      setMessage('✅ Membre ajouté')
-      setForm({ name: '', initials: '', color: '#0E5AA7', role: 'conducteur', contract: '' })
+      setMessage('✅ Membre ajouté' + (form.email ? ` — email : ${form.email}` : ''))
+      setForm({ name: '', initials: '', color: '#0E5AA7', role: 'conducteur', contract: '', email: '', password: '' })
       setShowForm(false)
       loadAll()
     }
@@ -406,6 +430,21 @@ export default function Personnel() {
                       {['CDI temps plein','CDI temps partiel','CDI 28h','CDI 30h','CDI 35h','CDD','Intérim','Alternance','Gérant'].map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
+                  {form.role === 'conducteur' && (
+                    <div style={{ background: '#F0F7FF', border: '1px solid #BBDEFB', borderRadius: '8px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#0E5AA7' }}>🔐 Accès appli conducteur</div>
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '4px' }}>Email *</label>
+                        <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="jean.dupont@rgom.fr"
+                          style={{ width: '100%', padding: '7px 10px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '4px' }}>Mot de passe provisoire *</label>
+                        <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••"
+                          style={{ width: '100%', padding: '7px 10px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '12px', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                      </div>
+                    </div>
+                  )}
                   {message && <div style={{ background: message.includes('✅') ? '#E8F5E9' : '#FFEBEE', color: message.includes('✅') ? '#1B5E20' : '#C62828', fontSize: '11px', padding: '8px 10px', borderRadius: '5px' }}>{message}</div>}
                   <button onClick={handleSave} disabled={saving}
                     style={{ background: saving ? '#8A95A3' : '#0E5AA7', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '12px', fontWeight: '700', padding: '10px', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer' }}>
