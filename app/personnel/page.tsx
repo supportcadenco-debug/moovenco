@@ -141,8 +141,8 @@ export default function Personnel() {
   }
 
   async function loadStaffDocs(profileId) {
-    const { data } = await supabase.from('client_documents').select('*')
-      .eq('client_id', profileId).order('created_at', { ascending: false })
+    const { data } = await supabase.from('staff_documents').select('*')
+      .eq('profile_id', profileId).order('created_at', { ascending: false })
     setStaffDocs(data || [])
   }
 
@@ -179,8 +179,8 @@ export default function Personnel() {
         setMessage('Erreur upload : ' + upErr.message)
       } else {
         const { data: urlData } = supabase.storage.from('driver-documents').getPublicUrl(path)
-        const { error: dbErr } = await supabase.from('client_documents').insert({
-          company_id: COMPANY_ID, client_id: selected.id,
+        const { error: dbErr } = await supabase.from('staff_documents').insert({
+          company_id: COMPANY_ID, profile_id: selected.id,
           nom: file.name, categorie, url: urlData.publicUrl, taille: file.size,
         })
         if (dbErr) {
@@ -200,7 +200,7 @@ export default function Personnel() {
 
   async function deleteDoc(doc) {
     if (!confirm(`Supprimer "${doc.nom}" ?`)) return
-    await supabase.from('client_documents').delete().eq('id', doc.id)
+    await supabase.from('staff_documents').delete().eq('id', doc.id)
     setStaffDocs(prev => prev.filter(d => d.id !== doc.id))
   }
 
