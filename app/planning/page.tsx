@@ -975,7 +975,55 @@ export default function Planning() {
             setGantt(g => ({ ...g }))
             fillFromOrder(order)
           }}
-          onFillFromCircuit={(circuit) => fillFromCircuit(circuit)}
+          onFillFromCircuit={async (circuit) => {
+            // Utiliser le contexte du Gantt (driver + date)
+            const driverId = gantt.driver.id
+            const date = gantt.date
+            const dateStr = dateKey(date)
+            setSendingPlanning(true)
+
+            const planKey = `${driverId}_${dateStr}`
+            let planning = plannings[planKey]
+            if (!planning) {
+              const { data: newPlan } = await supabase.from('planning').insert({
+                id: generateId(), company_id: COMPANY_ID, driver_id: driverId,
+                date: dateStr, day_type: 'Scolaire', day_color: '#1A2130',
+              }).select().single()
+              if (newPlan) {
+                planning = newPlan
+                setPlannings(prev => ({ ...prev, [planKey]: planning }))
+              }
+            }
+            if (!planning) { setSendingPlanning(false); return }
+
+            const debut  = circuit.heure_debut || '07:00'
+            const fin    = circuit.heure_fin   || '08:30'
+            const debMin = parseInt(debut.split(':')[0])*60 + parseInt(debut.split(':')[1])
+            const finMin  = parseInt(fin.split(':')[0])*60   + parseInt(fin.split(':')[1])
+            const toTime  = (m) => `${String(Math.floor(Math.max(0,m)/60)%24).padStart(2,'0')}:${String(Math.max(0,m)%60).padStart(2,'0')}`
+
+            const skeleton = [
+              { label: 'PDS', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-20), end_time: toTime(debMin-10), from_label: 'Garage Janzé', to_label: 'Garage Janzé' },
+              { label: 'HLP', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-10), end_time: debut, from_label: 'Garage Janzé', to_label: circuit.name },
+              { label: circuit.code || circuit.name, type: 'scolaire', color: '#1A2130', start_time: debut, end_time: fin, from_label: circuit.name, to_label: circuit.name },
+              { label: 'FDS', type: 'neutre', color: '#9AA3B2', start_time: fin, end_time: toTime(finMin+10), from_label: circuit.name, to_label: 'Garage Janzé' },
+            ]
+
+            for (const slot of skeleton) {
+              await supabase.from('slots').insert({
+                id: generateId(), company_id: COMPANY_ID, planning_id: planning.id,
+                label: slot.label, type: slot.type, color: slot.color,
+                start_time: slot.start_time, end_time: slot.end_time,
+                from_label: slot.from_label, to_label: slot.to_label,
+                vehicle: '', notes: '',
+              })
+            }
+
+            await loadSlots()
+            const { data: newSlots } = await supabase.from('slots').select('*').eq('planning_id', planning.id)
+            setGantt(g => ({ ...g, slots: newSlots || [] }))
+            setSendingPlanning(false)
+          }}
         />
       )}
     </div>

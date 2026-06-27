@@ -178,9 +178,17 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
                   <div key={h} style={{ position: 'absolute', left: `${h * HOUR_W}px`, top: 0, bottom: 0, width: '1px', background: h % 6 === 0 ? '#D0D4DA' : '#ECEEF1' }} />
                 ))}
 
-                {/* Ligne heure actuelle */}
+                {/* Ligne heure actuelle - seulement si c'est aujourd'hui */}
                 {(() => {
                   const now = new Date()
+                  const todayStr = now.toISOString().split('T')[0]
+                  const offset = now.getTimezoneOffset()
+                  const local = new Date(now.getTime() - offset * 60000)
+                  const localToday = local.toISOString().split('T')[0]
+                  const ganttDateStr = date instanceof Date
+                    ? (() => { const off = date.getTimezoneOffset(); const d = new Date(date.getTime() - off * 60000); return d.toISOString().split('T')[0] })()
+                    : date
+                  if (ganttDateStr !== localToday) return null
                   const nowMin = now.getHours() * 60 + now.getMinutes()
                   const x = (nowMin / TOTAL_MIN) * totalW
                   return <div style={{ position: 'absolute', left: `${x}px`, top: 0, bottom: 0, width: '2px', background: '#E53935', zIndex: 3 }}>
@@ -318,7 +326,14 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
                   <input value={circuitSearch} onChange={e => setCircuitSearch(e.target.value)} placeholder="🔍 Nom du circuit…"
                     style={{ padding: '6px 8px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit' }} />
                   {(circuits || []).filter(c => !circuitSearch || c.name?.toLowerCase().includes(circuitSearch.toLowerCase())).map(circuit => (
-                    <div key={circuit.id} onClick={() => { if (onFillFromCircuit) onFillFromCircuit(circuit); setForm(null) }}
+                    <div key={circuit.id} onClick={() => {
+                      // Créer directement les slots depuis le Gantt
+                      if (onFillFromCircuit) {
+                        onFillFromCircuit(circuit)
+                        setForm(null)
+                        setFormTab('manuel')
+                      }
+                    }}
                       style={{ background: '#F8F9FB', border: '1px solid #D0D4DA', borderRadius: '6px', padding: '8px 10px', cursor: 'pointer' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = '#1A2130'; e.currentTarget.style.background = '#E8EAF0' }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0D4DA'; e.currentTarget.style.background = '#F8F9FB' }}>
