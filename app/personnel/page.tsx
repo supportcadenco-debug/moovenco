@@ -47,6 +47,41 @@ function ExpiryTag({ date, label }) {
   )
 }
 
+const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi']
+
+function CircuitAssigner({ circuits, driverCircuits, onAdd, saving }) {
+  const [selectedCircuit, setSelectedCircuit] = useState('')
+  const [selectedJours, setSelectedJours] = useState(['lundi','mardi','mercredi','jeudi','vendredi'])
+
+  function toggleJour(j) {
+    setSelectedJours(prev => prev.includes(j) ? prev.filter(x => x !== j) : [...prev, j])
+  }
+
+  return (
+    <div style={{ background: '#F8F9FB', borderRadius: '8px', padding: '10px 12px' }}>
+      <div style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', marginBottom: '6px' }}>Ajouter un circuit</div>
+      <select value={selectedCircuit} onChange={e => setSelectedCircuit(e.target.value)}
+        style={{ width: '100%', padding: '6px 8px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit', marginBottom: '8px' }}>
+        <option value="">— Sélectionner un circuit —</option>
+        {circuits.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+      </select>
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap' }}>
+        {JOURS.map(j => (
+          <button key={j} onClick={() => toggleJour(j)}
+            style={{ background: selectedJours.includes(j) ? '#1A2130' : '#F8F9FB', color: selectedJours.includes(j) ? 'white' : '#4A5568', border: '1px solid #D0D4DA', fontFamily: 'inherit', fontSize: '9px', fontWeight: '700', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}>
+            {j.slice(0,3).toUpperCase()}
+          </button>
+        ))}
+      </div>
+      <button onClick={() => { if (selectedCircuit && selectedJours.length > 0) { onAdd(selectedCircuit, selectedJours); setSelectedCircuit('') } }}
+        disabled={!selectedCircuit || selectedJours.length === 0 || saving}
+        style={{ width: '100%', background: (!selectedCircuit || saving) ? '#8A95A3' : '#1A9E50', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '7px', borderRadius: '5px', cursor: 'pointer' }}>
+        {saving ? 'Enregistrement…' : '+ Assigner ce circuit'}
+      </button>
+    </div>
+  )
+}
+
 export default function Personnel() {
   const [staff, setStaff] = useState([])
   const [driverDetails, setDriverDetails] = useState({})
@@ -63,6 +98,9 @@ export default function Personnel() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [editingDriver, setEditingDriver] = useState(false)
+  const [driverCircuits, setDriverCircuits] = useState([])
+  const [circuits, setCircuits] = useState([])
+  const [savingCircuit, setSavingCircuit] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -76,6 +114,36 @@ export default function Personnel() {
     ;(d || []).forEach(dd => { map[dd.profile_id] = dd })
     setDriverDetails(map)
     setLoading(false)
+    // Charger circuits disponibles
+    const { data: circs } = await supabase.from('circuits').select('id, nom, heure_debut, heure_fin').eq('company_id', COMPANY_ID).order('nom')
+    setCircuits(circs || [])
+  }
+
+  async function loadDriverCircuits(driverId) {
+    const { data } = await supabase.from('driver_circuits').select('*, circuits(id, nom, heure_debut, heure_fin)')
+      .eq('driver_id', driverId).eq('actif', true)
+    setDriverCircuits(data || [])
+  }
+
+  async function addDriverCircuit(circuitId, jours) {
+    if (!selected) return
+    setSavingCircuit(true)
+    // Vérifier si déjà existant
+    const existing = driverCircuits.find(dc => dc.circuit_id === circuitId)
+    if (existing) {
+      await supabase.from('driver_circuits').update({ jours }).eq('id', existing.id)
+    } else {
+      await supabase.from('driver_circuits').insert({
+        company_id: COMPANY_ID, driver_id: selected.id, circuit_id: circuitId, jours, actif: true
+      })
+    }
+    await loadDriverCircuits(selected.id)
+    setSavingCircuit(false)
+  }
+
+  async function removeDriverCircuit(id) {
+    await supabase.from('driver_circuits').delete().eq('id', id)
+    setDriverCircuits(prev => prev.filter(dc => dc.id !== id))
   }
 
   function getRoleInfo(value) {
@@ -444,6 +512,56 @@ export default function Personnel() {
                       ) : (
                         <div style={{ textAlign: 'center', color: '#8A95A3', fontSize: '11px', padding: '16px', background: '#F8F9FB', borderRadius: '8px' }}>
                           Aucune fiche conducteur — cliquez sur ✏️ Modifier pour en créer une
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CIRCUITS HABITUELS */}
+                  {selected.role === 'conducteur' && (
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '8px' }}>🏫 Circuits habituels</div>
+                      
+                      {/* Circuits déjà assignés */}
+                      {driverCircuits.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#8A95A3', fontSize: '11px', padding: '12px', background: '#F8F9FB', borderRadius: '8px', marginBottom: '8px' }}>
+                          Aucun circuit habituel assigné
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                          {driverCircuits.map(dc => (
+                            <div key={dc.id} style={{ background: '#E8EAF0', borderRadius: '6px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>{dc.circuits?.nom || '—'}</div>
+                                <div style={{ fontSize: '10px', color: '#8A95A3', marginTop: '2px' }}>
+                                  {dc.circuits?.heure_debut && `🕐 ${dc.circuits.heure_debut} → ${dc.circuits.heure_fin || '—'}`}
+                                </div>
+                                <div style={{ display: 'flex', gap: '3px', marginTop: '4px', flexWrap: 'wrap' }}>
+                                  {['lundi','mardi','mercredi','jeudi','vendredi'].map(j => (
+                                    <span key={j} style={{ fontSize: '9px', fontWeight: '700', padding: '1px 5px', borderRadius: '4px', background: dc.jours?.includes(j) ? '#1A2130' : '#D0D4DA', color: dc.jours?.includes(j) ? 'white' : '#8A95A3' }}>
+                                      {j.slice(0,3).toUpperCase()}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <button onClick={() => removeDriverCircuit(dc.id)}
+                                style={{ background: 'none', border: 'none', color: '#C62828', cursor: 'pointer', fontSize: '14px' }}>🗑</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Ajouter un circuit */}
+                      {circuits.length > 0 ? (
+                        <CircuitAssigner
+                          circuits={circuits}
+                          driverCircuits={driverCircuits}
+                          onAdd={addDriverCircuit}
+                          saving={savingCircuit}
+                        />
+                      ) : (
+                        <div style={{ fontSize: '10px', color: '#8A95A3', textAlign: 'center', padding: '8px', background: '#F8F9FB', borderRadius: '6px' }}>
+                          Aucun circuit disponible — créez des circuits dans le module Scolaire
                         </div>
                       )}
                     </div>

@@ -289,6 +289,63 @@ export default function Planning() {
     else alert(`✅ Planning du ${dates[0].toLocaleDateString('fr-FR')} au ${dates[6].toLocaleDateString('fr-FR')} envoyé aux conducteurs !`)
   }
 
+  async function generateCircuitsRecurrents() {
+    setSendingPlanning(true)
+    const dates = getWeekDates(weekOffset + 1)
+    const { data: driverCircuits } = await supabase
+      .from('driver_circuits')
+      .select('*, circuits(id, nom, heure_debut, heure_fin)')
+      .eq('company_id', COMPANY_ID).eq('actif', true)
+    if (!driverCircuits || driverCircuits.length === 0) {
+      alert('Aucun circuit habituel configuré dans le module Personnel.')
+      setSendingPlanning(false); return
+    }
+    const { data: periodes } = await supabase.from('calendrier_scolaire').select('*')
+      .eq('company_id', COMPANY_ID).eq('type', 'cours')
+    const JOURS_MAP = { 1: 'lundi', 2: 'mardi', 3: 'mercredi', 4: 'jeudi', 5: 'vendredi', 6: 'samedi', 0: 'dimanche' }
+    let created = 0
+    for (const date of dates) {
+      const dateStr = dateKey(date)
+      const jourNom = JOURS_MAP[date.getDay()]
+      const isScolaire = (periodes || []).length === 0 || (periodes || []).some(p => dateStr >= p.date_debut && dateStr <= p.date_fin)
+      if (!isScolaire) continue
+      for (const dc of driverCircuits) {
+        if (!dc.jours?.includes(jourNom)) continue
+        const circuit = dc.circuits
+        if (!circuit) continue
+        const driverId = dc.driver_id
+        const planKey = `${driverId}_${dateStr}`
+        let planning = plannings[planKey]
+        if (!planning) {
+          const { data: newPlan, error } = await supabase.from('planning').insert({
+            id: generateId(), company_id: COMPANY_ID, driver_id: driverId,
+            date: dateStr, day_type: 'Scolaire', day_color: '#1A2130',
+          }).select().single()
+          if (error) continue
+          planning = newPlan
+        }
+        const debut = circuit.heure_debut || '07:00'
+        const fin   = circuit.heure_fin   || '08:30'
+        const debMin = parseInt(debut.split(':')[0])*60 + parseInt(debut.split(':')[1])
+        const finMin  = parseInt(fin.split(':')[0])*60   + parseInt(fin.split(':')[1])
+        const toTime = (m) => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
+        const skeleton = [
+          { label: 'PDS',       type: 'neutre',   color: '#9AA3B2', start_time: toTime(debMin-20), end_time: toTime(debMin-10), from_label: 'Garage Janzé', to_label: 'Garage Janzé' },
+          { label: 'HLP',       type: 'neutre',   color: '#9AA3B2', start_time: toTime(debMin-10), end_time: debut,             from_label: 'Garage Janzé', to_label: circuit.nom },
+          { label: circuit.nom, type: 'scolaire', color: '#1A2130', start_time: debut,             end_time: fin,               from_label: circuit.nom,    to_label: circuit.nom },
+          { label: 'FDS',       type: 'neutre',   color: '#9AA3B2', start_time: fin,               end_time: toTime(finMin+10), from_label: circuit.nom,    to_label: 'Garage Janzé' },
+        ]
+        for (const slot of skeleton) {
+          await supabase.from('slots').insert({ id: generateId(), company_id: COMPANY_ID, planning_id: planning.id, label: slot.label, type: slot.type, color: slot.color, start_time: slot.start_time, end_time: slot.end_time, from_label: slot.from_label, to_label: slot.to_label, vehicle: '', notes: '' })
+          created++
+        }
+      }
+    }
+    setSendingPlanning(false)
+    await loadSlots()
+    alert(`✅ ${Math.floor(created/4)} circuit(s) générés pour la semaine du ${dates[0].toLocaleDateString('fr-FR')}`)
+  }
+
   async function handleCreateSlot() {
     if (!form.label) { setMessage('Libellé obligatoire'); return }
     setSaving(true)
@@ -369,6 +426,10 @@ export default function Planning() {
           <button onClick={handleSendPlanning} disabled={sendingPlanning}
             style={{ background: sendingPlanning ? '#8A95A3' : '#0E5AA7', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 14px', borderRadius: '5px', cursor: 'pointer' }}>
             {sendingPlanning ? '⏳ Envoi…' : '📤 Envoyer planning semaine suivante'}
+          </button>
+          <button onClick={generateCircuitsRecurrents} disabled={sendingPlanning}
+            style={{ background: sendingPlanning ? '#8A95A3' : '#1A9E50', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 14px', borderRadius: '5px', cursor: 'pointer', marginLeft: '6px' }}>
+            🏫 Générer circuits scolaires
           </button>
         </div>
       </div>
