@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../src/lib/supabase'
 import Navbar from '../../src/components/Navbar'
 
@@ -116,7 +116,6 @@ export default function Personnel() {
   const [editingCircuits, setEditingCircuits] = useState(false)
   const [staffDocs, setStaffDocs]        = useState([])
   const [uploadingDoc, setUploadingDoc]  = useState(false)
-  const fileRef = useRef(null)
 
   useEffect(() => { loadAll() }, [])
 
@@ -167,21 +166,36 @@ export default function Personnel() {
   }
 
   async function uploadDoc(e, categorie) {
-    const file = e.target.files[0]
+    const file = e.target.files?.[0]
     if (!file || !selected) return
     setUploadingDoc(true)
-    const path = `${selected.id}/${Date.now()}_${file.name}`
-    const { error: upErr } = await supabase.storage.from('driver-documents').upload(path, file)
-    if (!upErr) {
-      const { data: urlData } = supabase.storage.from('driver-documents').getPublicUrl(path)
-      await supabase.from('client_documents').insert({
-        company_id: COMPANY_ID, client_id: selected.id,
-        nom: file.name, categorie, url: urlData.publicUrl, taille: file.size,
-      })
-      await loadStaffDocs(selected.id)
+    try {
+      // Nettoyer le nom du fichier
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${selected.id}/${Date.now()}_${safeName}`
+      const { error: upErr } = await supabase.storage.from('driver-documents').upload(path, file, { upsert: false })
+      if (upErr) {
+        console.error('Upload error:', upErr)
+        setMessage('Erreur upload : ' + upErr.message)
+      } else {
+        const { data: urlData } = supabase.storage.from('driver-documents').getPublicUrl(path)
+        const { error: dbErr } = await supabase.from('client_documents').insert({
+          company_id: COMPANY_ID, client_id: selected.id,
+          nom: file.name, categorie, url: urlData.publicUrl, taille: file.size,
+        })
+        if (dbErr) {
+          setMessage('Erreur base de données : ' + dbErr.message)
+        } else {
+          await loadStaffDocs(selected.id)
+        }
+      }
+    } catch (err) {
+      console.error('Erreur inattendue:', err)
+      setMessage('Erreur inattendue lors de l\'upload')
     }
     setUploadingDoc(false)
-    if (fileRef.current) fileRef.current.value = ''
+    // Reset l'input
+    e.target.value = ''
   }
 
   async function deleteDoc(doc) {
@@ -605,9 +619,10 @@ export default function Personnel() {
                       <div key={cat.key} style={{ marginBottom:'16px' }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
                           <div style={{ fontSize:'11px', fontWeight:'700', color:'#1A2130' }}>{cat.label}</div>
-                          <label style={{ background: uploadingDoc?'#8A95A3':'#E8F0FB', color:'#0E5AA7', fontSize:'10px', fontWeight:'600', padding:'3px 8px', borderRadius:'4px', cursor:'pointer' }}>
+                          <label style={{ background: uploadingDoc?'#8A95A3':'#E8F0FB', color:'#0E5AA7', fontSize:'10px', fontWeight:'600', padding:'3px 8px', borderRadius:'4px', cursor: uploadingDoc?'not-allowed':'pointer' }}>
                             {uploadingDoc ? '⏳' : '+ Ajouter'}
-                            <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display:'none' }} ref={fileRef}
+                            <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display:'none' }}
+                              disabled={uploadingDoc}
                               onChange={e => uploadDoc(e, cat.key)} />
                           </label>
                         </div>
