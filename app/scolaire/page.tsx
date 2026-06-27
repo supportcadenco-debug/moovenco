@@ -24,7 +24,8 @@ export default function Scolaire() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
   const [creating, setCreating] = useState(false)
-  const [newCircuit, setNewCircuit] = useState({ name: '', code: '', direction: 'aller', heure_debut: '', heure_fin: '', notes: '' })
+  const [newCircuit, setNewCircuit] = useState({ name: '', code: '', direction: 'aller', heure_debut: '', heure_fin: '', vehicule_defaut: '', notes: '' })
+  const [vehicles, setVehicles] = useState([])
   const [editingHeures, setEditingHeures] = useState(false)
   const [pendingStops, setPendingStops] = useState([])
   const [saving, setSaving] = useState(false)
@@ -40,11 +41,13 @@ export default function Scolaire() {
   useEffect(() => { loadAll() }, [])
 
   async function loadAll() {
-    const [{ data: c }, { data: cs }, { data: a }] = await Promise.all([
+    const [{ data: c }, { data: cs }, { data: a }, { data: v }] = await Promise.all([
       supabase.from('circuits').select('*').eq('company_id', COMPANY_ID).order('code').order('name'),
       supabase.from('circuit_stops').select('*, addresses(*)').eq('company_id', COMPANY_ID).order('order_index'),
       supabase.from('addresses').select('*').eq('company_id', COMPANY_ID).order('city').order('name'),
+      supabase.from('vehicles').select('id, plate, type, seats').eq('company_id', COMPANY_ID).eq('active', true).order('plate'),
     ])
+    setVehicles(v || [])
     setCircuits(c || [])
     setAddresses(a || [])
     const stopMap = {}
@@ -92,6 +95,7 @@ export default function Scolaire() {
       name: newCircuit.name, code: newCircuit.code,
       direction: newCircuit.direction, notes: newCircuit.notes, active: true,
       heure_debut: newCircuit.heure_debut || null, heure_fin: newCircuit.heure_fin || null,
+      vehicule_defaut: newCircuit.vehicule_defaut || null,
     })
     if (circErr) { setMessage('Erreur : ' + circErr.message); setSaving(false); return }
 
@@ -417,6 +421,22 @@ export default function Scolaire() {
                         {selected.heure_debut ? `${selected.heure_debut} → ${selected.heure_fin || '—'}` : <span style={{ color: '#8A95A3' }}>Non renseigné</span>}
                       </div>
                     )}
+                  </div>
+
+                  {/* Véhicule par défaut */}
+                  <div style={{ background: '#F8F9FB', borderRadius: '6px', padding: '8px 10px', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#1A2130' }}>🚌 Véhicule par défaut</span>
+                    </div>
+                    <select defaultValue={selected.vehicule_defaut || ''} onChange={async e => {
+                      const val = e.target.value
+                      await supabase.from('circuits').update({ vehicule_defaut: val || null }).eq('id', selected.id)
+                      setSelected(s => ({ ...s, vehicule_defaut: val }))
+                      loadAll()
+                    }} style={{ width: '100%', padding: '5px 7px', border: '1px solid #D0D4DA', borderRadius: '4px', fontSize: '11px', fontFamily: 'inherit' }}>
+                      <option value="">— Aucun —</option>
+                      {vehicles.map(v => <option key={v.id} value={v.plate}>{v.plate} — {v.type} {v.seats ? v.seats+'p' : ''}</option>)}
+                    </select>
                   </div>
 
                   <div style={{ display: 'flex', gap: '5px' }}>
