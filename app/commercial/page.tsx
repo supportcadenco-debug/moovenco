@@ -7,15 +7,6 @@ import { supabase } from '../../src/lib/supabase'
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 const DELETE_PASSWORD = '1968A'
 
-const STATUS: any = {
-  devis:    { label: 'Devis',    color: '#7B3FB5', bg: '#F3E8FF' },
-  confirme: { label: 'Confirmé', color: '#1A9E50', bg: '#E8F5E9' },
-  affecte:  { label: 'Affecté',  color: '#D4720A', bg: '#FFF3E0' },
-  en_cours: { label: 'En cours', color: '#7B1FA2', bg: '#F3E5F5' },
-  termine:  { label: 'Terminé',  color: '#37474F', bg: '#ECEFF1' },
-  annule:   { label: 'Annulé',   color: '#C62828', bg: '#FFEBEE' },
-}
-
 const STATUTS_DOC: any = {
   devis:   { label: 'Devis',   color: '#7B3FB5', bg: '#F3E8FF' },
   signe:   { label: 'Signé',   color: '#D4720A', bg: '#FFF3E0' },
@@ -58,13 +49,7 @@ function getNextNumero(docs: any[], prefix: string) {
   return `${prefix}${year}-${String(max + 1).padStart(3, '0')}`
 }
 
-function autoRef() {
-  const now = new Date()
-  return `D${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${Math.floor(Math.random()*1000).toString().padStart(3,'0')}`
-}
-
 const EMPTY_FORM = {
-  // Devis/facture
   type_document: 'devis',
   client_id: '', client_nom: '', client_adresse: '', client_cp: '', client_ville: '',
   client_email: '', client_siret: '', client_type: 'mairie',
@@ -75,7 +60,6 @@ const EMPTY_FORM = {
   distance_km: '', tarif_km: '', tarif_journee: '',
   nb_jours: 1, frais_attente: 0,
   bc_reference: '', notes: '',
-  // Order/BC
   destination: '', origin: '', date_retour: '',
   passengers: '', vehicule_plaque: '', vehicule_places: '', places_prevues: '',
   heure_depart_garage: '', heure_prise_charge: '', heure_depart: '',
@@ -102,14 +86,10 @@ export default function Commercial() {
   const [search, setSearch] = useState('')
   const [generatingBC, setGeneratingBC] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
-
-  // Autocomplete client
   const [clientSearch, setClientSearch] = useState('')
   const [clientSuggestions, setClientSuggestions] = useState<any[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const clientRef = useRef<HTMLDivElement>(null)
-
-  // Suppression
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deletePassword, setDeletePassword] = useState('')
@@ -141,7 +121,6 @@ export default function Commercial() {
     setLoading(false)
   }
 
-  // --- Autocomplete ---
   function handleClientSearch(val: string) {
     setClientSearch(val)
     setForm((f: any) => ({ ...f, client_nom: val, client_id: '' }))
@@ -169,7 +148,6 @@ export default function Commercial() {
     setShowSuggestions(false)
   }
 
-  // --- Tarif auto ---
   function getTarifAuto(vehicle: string, client: string) {
     return tarifs.find(t => t.vehicle_type === vehicle && t.client_type === client) || null
   }
@@ -228,6 +206,24 @@ export default function Commercial() {
     return newId
   }
 
+  const extraFields = () => ({
+    destination: form.destination || null,
+    origin: form.origin || null,
+    passengers: parseInt(form.passengers) || null,
+    vehicule_plaque: form.vehicule_plaque || null,
+    vehicule_places: parseInt(form.vehicule_places) || null,
+    heure_depart_garage: form.heure_depart_garage || null,
+    heure_prise_charge: form.heure_prise_charge || null,
+    heure_depart: form.heure_depart || null,
+    heure_retour: form.heure_retour || null,
+    heure_retour_garage: form.heure_retour_garage || null,
+    lieu_prise_charge: form.lieu_prise_charge || null,
+    lieu_depose: form.lieu_depose || null,
+    conducteur_nom: form.conducteur_nom || null,
+    conducteur_prenom: form.conducteur_prenom || null,
+    assigned_driver: form.assigned_driver || null,
+  })
+
   async function handleSave() {
     if (!form.client_nom) { setMessage('Nom client obligatoire'); return }
     setSaving(true); setMessage('')
@@ -248,12 +244,35 @@ export default function Commercial() {
         distance_km: form.distance_km || null, frais_attente: form.frais_attente || 0,
         vehicle_type: form.vehicle_type, bc_reference: form.bc_reference || null,
         montant_ht: ht, montant_tva: tva, montant_ttc: ttc, lignes, notes: form.notes,
+        ...extraFields(),
       }).eq('id', editId)
+      // Mettre à jour aussi dans orders
+      const facture = factures.find(f => f.id === editId)
+      if (facture?.numero) {
+        await supabase.from('orders').update({
+          client_responsable: form.client_nom,
+          destination: form.destination || null,
+          origin: form.origin || null,
+          date_service: form.date_service || null,
+          passengers: parseInt(form.passengers) || null,
+          vehicule_plaque: form.vehicule_plaque || null,
+          heure_depart_garage: form.heure_depart_garage || null,
+          heure_prise_charge: form.heure_prise_charge || null,
+          heure_depart: form.heure_depart || null,
+          heure_retour: form.heure_retour || null,
+          heure_retour_garage: form.heure_retour_garage || null,
+          lieu_prise_charge: form.lieu_prise_charge || null,
+          lieu_depose: form.lieu_depose || null,
+          conducteur_nom: form.conducteur_nom || null,
+          conducteur_prenom: form.conducteur_prenom || null,
+          assigned_driver: form.assigned_driver || null,
+        }).eq('reference', facture.numero).eq('company_id', COMPANY_ID)
+      }
       if (error) setMessage('Erreur : ' + error.message)
       else { setMessage('✅ Devis modifié'); setShowForm(false); setEditId(null); setForm(EMPTY_FORM); setClientSearch(''); loadAll() }
     } else {
       const numero = getNextNumero(factures, 'DEV')
-      const { data: newDoc, error } = await supabase.from('factures').insert({
+      const { error } = await supabase.from('factures').insert({
         id: generateId(), company_id: COMPANY_ID,
         numero, type_document: 'devis', statut: 'devis',
         client_id: clientId, client_nom: form.client_nom,
@@ -267,19 +286,18 @@ export default function Commercial() {
         distance_km: form.distance_km || null, frais_attente: form.frais_attente || 0,
         vehicle_type: form.vehicle_type, bc_reference: form.bc_reference || null,
         montant_ht: ht, montant_tva: tva, montant_ttc: ttc, lignes, notes: form.notes,
-      }).select().single()
+        ...extraFields(),
+      })
       if (error) setMessage('Erreur : ' + error.message)
       else {
-        // Créer aussi dans orders pour le BC PDF
         await supabase.from('orders').insert({
           company_id: COMPANY_ID,
           reference: numero,
-          status: 'devis',
+          status: 'confirme',
           client_id: clientId,
-          client_name: form.client_nom,
+          client_responsable: form.client_nom,
           client_adresse: form.client_adresse,
           client_cp_ville: `${form.client_cp} ${form.client_ville}`.trim(),
-          client_responsable: form.client_contact_nom,
           client_tel: form.client_contact_tel,
           client_mail: form.client_email,
           destination: form.destination || '',
@@ -337,12 +355,23 @@ export default function Commercial() {
       frais_attente: doc.frais_attente || 0,
       bc_reference: doc.bc_reference || '',
       notes: doc.notes || '',
-      destination: '', origin: '', date_retour: '',
-      passengers: '', vehicule_plaque: '', vehicule_places: '', places_prevues: '',
-      heure_depart_garage: '', heure_prise_charge: '', heure_depart: '',
-      heure_retour: '', heure_retour_garage: '',
-      lieu_prise_charge: '', lieu_depose: '',
-      assigned_driver: '', conducteur_nom: '', conducteur_prenom: '',
+      destination: doc.destination || '',
+      origin: doc.origin || '',
+      date_retour: '',
+      passengers: doc.passengers || '',
+      vehicule_plaque: doc.vehicule_plaque || '',
+      vehicule_places: doc.vehicule_places || '',
+      places_prevues: doc.places_prevues || '',
+      heure_depart_garage: doc.heure_depart_garage || '',
+      heure_prise_charge: doc.heure_prise_charge || '',
+      heure_depart: doc.heure_depart || '',
+      heure_retour: doc.heure_retour || '',
+      heure_retour_garage: doc.heure_retour_garage || '',
+      lieu_prise_charge: doc.lieu_prise_charge || '',
+      lieu_depose: doc.lieu_depose || '',
+      assigned_driver: doc.assigned_driver || '',
+      conducteur_nom: doc.conducteur_nom || '',
+      conducteur_prenom: doc.conducteur_prenom || '',
     })
     setClientSearch(doc.client_nom || '')
     setEditId(doc.id); setShowForm(true); setSelected(null)
@@ -355,7 +384,6 @@ export default function Commercial() {
   async function confirmDelete() {
     if (deletePassword !== DELETE_PASSWORD) { setDeleteError('Mot de passe incorrect'); return }
     await supabase.from('factures').delete().eq('id', deleteTarget.id)
-    // Supprimer aussi dans orders si référence identique
     if (deleteTarget.numero) await supabase.from('orders').delete().eq('reference', deleteTarget.numero).eq('company_id', COMPANY_ID)
     setShowDeleteModal(false); setDeleteTarget(null); setSelected(null); loadAll()
   }
@@ -453,7 +481,7 @@ export default function Commercial() {
 
           let y = m + 52
           doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-          doc.text(`COMMANDE : ${order.reference || ''}`, m + 3, y)
+          doc.text(`COMMANDE : ${order.reference || order.numero || ''}`, m + 3, y)
           doc.setFontSize(9); doc.text('VEHICULE :', W / 2 + 3, y)
           doc.setFont('helvetica', 'bold'); doc.setFontSize(10)
           doc.text(order.vehicule_plaque || order.vehicle_type || '—', W / 2 + 25, y)
@@ -478,13 +506,13 @@ export default function Commercial() {
           doc.setFont('helvetica', 'bold'); doc.text(`Occasionnel`, W / 2 + 43, y)
 
           y += 5; doc.setFont('helvetica', 'italic')
-          doc.text(`Prix selon facture - ${order.reference || ''}`, W / 2 + 3, y)
+          doc.text(`Prix selon facture - ${order.reference || order.numero || ''}`, W / 2 + 3, y)
 
           y += 8
           doc.setDrawColor(0, 100, 180); doc.setFillColor(200, 230, 255)
           doc.rect(m, y, W - m * 2, 6, 'F')
           doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 80, 160)
-          doc.text(`Client : ${(order.client_nom || order.client_name || '').toUpperCase()}`, m + 3, y + 4)
+          doc.text(`Client : ${(order.client_nom || order.client_responsable || '').toUpperCase()}`, m + 3, y + 4)
           doc.setTextColor(0); doc.setDrawColor(0)
 
           y += 6
@@ -494,7 +522,7 @@ export default function Commercial() {
           doc.text(order.client_adresse || '', m + 3, y + 6)
           doc.text(order.client_cp_ville || `${order.client_cp || ''} ${order.client_ville || ''}`.trim(), m + 3, y + 11)
           doc.text('Responsable :', m + (W - m * 2) / 2 + 3, y + 6)
-          doc.text(order.client_responsable || order.client_contact_nom || '', m + (W - m * 2) / 2 + 28, y + 6)
+          doc.text(order.client_responsable || order.client_nom || '', m + (W - m * 2) / 2 + 28, y + 6)
           doc.text('Tel :', m + (W - m * 2) / 2 + 3, y + 11)
           doc.text(order.client_tel || order.client_contact_tel || '', m + (W - m * 2) / 2 + 14, y + 11)
           doc.text('Mail :', m + (W - m * 2) / 2 + 3, y + 16)
@@ -586,14 +614,14 @@ export default function Commercial() {
           doc.rect(m, y + 3, W - m * 2, H - m - y - 3)
         }
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7)
-        doc.text(`Page ${pageNum} sur 2 - Devis n° ${order.reference || ''}`, W / 2, H - m - 3, { align: 'center' })
+        doc.text(`Page ${pageNum} sur 2 - Devis n° ${order.reference || order.numero || ''}`, W / 2, H - m - 3, { align: 'center' })
       }
 
-      // Chercher le order correspondant
-      const orderData = orders.find(o => o.reference === selected?.numero) || selected
-      genPage(doc, { ...orderData, ...selected }, 1)
+      const orderData = orders.find(o => o.reference === selected?.numero) || {}
+      const mergedData = { ...orderData, ...selected }
+      genPage(doc, mergedData, 1)
       doc.addPage()
-      genPage(doc, { ...orderData, ...selected }, 2)
+      genPage(doc, mergedData, 2)
       doc.save(`BC_${selected?.numero || 'billet'}_${new Date().toISOString().split('T')[0]}.pdf`)
     } catch(e) { console.error(e); alert('Erreur génération PDF') }
     setGeneratingBC(false)
@@ -618,7 +646,6 @@ export default function Commercial() {
 
       <Navbar currentPage="commercial" />
 
-      {/* MODAL SUPPRESSION */}
       {showDeleteModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: 'white', borderRadius: '12px', padding: '24px', width: '340px', boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
@@ -640,7 +667,6 @@ export default function Commercial() {
         </div>
       )}
 
-      {/* BARRE ACTION */}
       <div style={{ background: '#253044', padding: '0 16px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '6px' }}>
           {(['tous', 'devis', 'signe', 'emise', 'envoyee', 'payee'] as const).map(k => {
@@ -663,7 +689,6 @@ export default function Commercial() {
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* LISTE */}
         <div style={{ width: '320px', minWidth: '320px', background: 'white', borderRight: '1px solid #D0D4DA', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '8px 14px', borderBottom: '1px solid #F0F2F5' }}>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Rechercher…"
@@ -695,7 +720,6 @@ export default function Commercial() {
               )
             })}
           </div>
-          {/* STATS */}
           <div style={{ padding: '10px 14px', borderTop: '1px solid #E2E6EA', background: '#F8F9FB' }}>
             {[
               ['Devis', factures.filter(d => d.type_document === 'devis').length + ' doc.', '#7B3FB5'],
@@ -710,23 +734,18 @@ export default function Commercial() {
           </div>
         </div>
 
-        {/* ZONE PRINCIPALE */}
         <div style={{ flex: 1, overflow: 'auto', padding: '14px' }}>
 
-          {/* FORMULAIRE */}
           {showForm && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
               <div style={{ background: 'white', borderRadius: '10px', padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.06)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ fontSize: '13px', fontWeight: '700', color: '#7B3FB5' }}>{editId ? '✏️ Modifier le devis' : '📋 Nouveau devis'}</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
 
-                {/* CLIENT */}
                 <div style={{ background: 'white', borderRadius: '10px', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '10px' }}>👤 Client</div>
-
                   <div style={{ marginBottom: '7px', position: 'relative' }} ref={clientRef}>
                     <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Nom / Raison sociale *</label>
                     <input value={clientSearch} onChange={e => handleClientSearch(e.target.value)}
@@ -748,14 +767,12 @@ export default function Commercial() {
                       </div>
                     )}
                   </div>
-
                   {[['Adresse', 'client_adresse', 'text'], ['Code postal', 'client_cp', 'text'], ['Ville', 'client_ville', 'text'], ['Email', 'client_email', 'email'], ['SIRET', 'client_siret', 'text'], ['Contact (nom)', 'client_contact_nom', 'text'], ['Contact (tél)', 'client_contact_tel', 'text']].map(([label, key, type]) => (
                     <div key={key} style={{ marginBottom: '7px' }}>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>{label}</label>
                       {inp(form[key], (e: any) => setForm((f: any) => ({ ...f, [key]: e.target.value })), { type })}
                     </div>
                   ))}
-
                   <div style={{ marginBottom: '7px' }}>
                     <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Type de client</label>
                     <select value={form.client_type} onChange={e => { setForm((f: any) => ({ ...f, client_type: e.target.value })); applyTarifAuto(form.vehicle_type, e.target.value, form.tarif_mode) }}
@@ -763,12 +780,10 @@ export default function Commercial() {
                       {TYPE_CLIENT.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                     </select>
                   </div>
-
                   <div style={{ marginBottom: '7px' }}>
                     <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Bon de commande client</label>
                     {inp(form.bc_reference, (e: any) => setForm((f: any) => ({ ...f, bc_reference: e.target.value })), { placeholder: 'ex: JA269845-2026' })}
                   </div>
-
                   {!form.client_id && clientSearch.length > 1 && (
                     <div style={{ background: '#FFF8E1', border: '1px solid #FFD54F', borderRadius: '6px', padding: '7px 10px', fontSize: '10px', color: '#D4720A' }}>
                       ℹ️ Nouveau client — fiche créée automatiquement à l'enregistrement.
@@ -781,12 +796,9 @@ export default function Commercial() {
                   )}
                 </div>
 
-                {/* PRESTATION + CONDUCTEUR */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
                   <div style={{ background: 'white', borderRadius: '10px', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '10px' }}>🚌 Prestation</div>
-
                     <div style={{ marginBottom: '7px' }}>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Destination</label>
                       {inp(form.destination, (e: any) => setForm((f: any) => ({ ...f, destination: e.target.value })), { placeholder: 'Mont-Saint-Michel' })}
@@ -795,7 +807,6 @@ export default function Commercial() {
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Lieu de départ</label>
                       {inp(form.origin, (e: any) => setForm((f: any) => ({ ...f, origin: e.target.value })), { placeholder: 'Janzé - Parking...' })}
                     </div>
-
                     <div style={{ marginBottom: '7px' }}>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Véhicule</label>
                       <select value={form.vehicle_type} onChange={e => { setForm((f: any) => ({ ...f, vehicle_type: e.target.value })); applyTarifAuto(e.target.value, form.client_type, form.tarif_mode) }}
@@ -803,7 +814,6 @@ export default function Commercial() {
                         {TYPE_VEHICULE.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                       </select>
                     </div>
-
                     <div style={{ marginBottom: '7px' }}>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Mode de tarification</label>
                       <div style={{ display: 'flex', gap: '5px' }}>
@@ -815,7 +825,6 @@ export default function Commercial() {
                         ))}
                       </div>
                     </div>
-
                     {form.tarif_mode === 'km' && (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px', marginBottom: '7px' }}>
                         <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Distance (km)</label>{inp(form.distance_km, (e: any) => setForm((f: any) => ({ ...f, distance_km: e.target.value })), { type: 'number' })}</div>
@@ -828,17 +837,14 @@ export default function Commercial() {
                         {form.tarif_mode === 'multi_jours' && <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Nb jours</label>{inp(form.nb_jours, (e: any) => setForm((f: any) => ({ ...f, nb_jours: e.target.value })), { type: 'number', min: '1' })}</div>}
                       </div>
                     )}
-
                     <div style={{ marginBottom: '7px' }}>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Frais d'attente (€)</label>
                       {inp(form.frais_attente, (e: any) => setForm((f: any) => ({ ...f, frais_attente: e.target.value })), { type: 'number', step: '0.01' })}
                     </div>
-
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px', marginBottom: '7px' }}>
                       <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Date du service</label>{inp(form.date_service, (e: any) => setForm((f: any) => ({ ...f, date_service: e.target.value })), { type: 'date' })}</div>
                       <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Passagers</label>{inp(form.passengers, (e: any) => setForm((f: any) => ({ ...f, passengers: e.target.value })), { type: 'number' })}</div>
                     </div>
-
                     <div style={{ marginBottom: '7px' }}>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>TVA</label>
                       <div style={{ display: 'flex', gap: '5px' }}>
@@ -850,7 +856,6 @@ export default function Commercial() {
                         ))}
                       </div>
                     </div>
-
                     <div>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Notes / Itinéraire</label>
                       <textarea value={form.notes} onChange={e => setForm((f: any) => ({ ...f, notes: e.target.value }))} rows={3}
@@ -858,10 +863,8 @@ export default function Commercial() {
                     </div>
                   </div>
 
-                  {/* CONDUCTEUR */}
                   <div style={{ background: 'white', borderRadius: '10px', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '10px' }}>🧑‍✈️ Conducteur & Véhicule</div>
-
                     <div style={{ marginBottom: '7px' }}>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Conducteur</label>
                       <select value={form.assigned_driver} onChange={e => {
@@ -877,12 +880,10 @@ export default function Commercial() {
                         {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                       </select>
                     </div>
-
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px', marginBottom: '7px' }}>
                       <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Plaque véhicule</label>{inp(form.vehicule_plaque, (e: any) => setForm((f: any) => ({ ...f, vehicule_plaque: e.target.value })))}</div>
                       <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Places car</label>{inp(form.vehicule_places, (e: any) => setForm((f: any) => ({ ...f, vehicule_places: e.target.value })), { type: 'number' })}</div>
                     </div>
-
                     <div style={{ fontSize: '10px', fontWeight: '700', color: '#8A95A3', textTransform: 'uppercase', letterSpacing: '.4px', margin: '8px 0 6px' }}>Horaires</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px', marginBottom: '7px' }}>
                       {[['Départ garage', 'heure_depart_garage'], ['Prise en charge', 'heure_prise_charge'], ['Départ', 'heure_depart'], ['Retour', 'heure_retour'], ['Retour garage', 'heure_retour_garage']].map(([label, key]) => (
@@ -893,7 +894,6 @@ export default function Commercial() {
                         </div>
                       ))}
                     </div>
-
                     <div style={{ fontSize: '10px', fontWeight: '700', color: '#8A95A3', textTransform: 'uppercase', letterSpacing: '.4px', margin: '8px 0 6px' }}>Lieux</div>
                     {[['Lieu de prise en charge', 'lieu_prise_charge'], ['Lieu de dépose terminale', 'lieu_depose']].map(([label, key]) => (
                       <div key={key} style={{ marginBottom: '7px' }}>
@@ -905,7 +905,6 @@ export default function Commercial() {
                 </div>
               </div>
 
-              {/* RECAP */}
               <div style={{ background: 'white', borderRadius: '10px', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '10px' }}>💰 Récapitulatif</div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -935,7 +934,6 @@ export default function Commercial() {
             </div>
           )}
 
-          {/* APERCU */}
           {selected && !showForm && (
             <div style={{ background: 'white', borderRadius: '10px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
@@ -985,7 +983,6 @@ export default function Commercial() {
                 </div>
               </div>
 
-              {/* AFFECTATION CONDUCTEUR */}
               {(() => {
                 const order = orders.find(o => o.reference === selected.numero)
                 return order ? (
@@ -1010,7 +1007,16 @@ export default function Commercial() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 {[
                   ['Client', [selected.client_nom, selected.client_adresse, `${selected.client_cp || ''} ${selected.client_ville || ''}`.trim(), selected.client_email].filter(Boolean)],
-                  ['Prestation', [`Véhicule : ${selected.vehicle_type || '—'}`, `Distance : ${selected.distance_km ? selected.distance_km + ' km' : '—'}`, `Date : ${selected.date_service ? new Date(selected.date_service).toLocaleDateString('fr-FR') : '—'}`, `Passagers : ${selected.passengers || '—'}`].filter(Boolean)],
+                  ['Prestation', [
+                    `Véhicule : ${selected.vehicle_type || '—'}`,
+                    selected.destination ? `Destination : ${selected.destination}` : null,
+                    `Distance : ${selected.distance_km ? selected.distance_km + ' km' : '—'}`,
+                    `Date : ${selected.date_service ? new Date(selected.date_service).toLocaleDateString('fr-FR') : '—'}`,
+                    `Passagers : ${selected.passengers || '—'}`,
+                    selected.heure_depart_garage ? `Départ garage : ${selected.heure_depart_garage}` : null,
+                    selected.heure_prise_charge ? `Prise en charge : ${selected.heure_prise_charge}` : null,
+                    selected.heure_retour ? `Retour : ${selected.heure_retour}` : null,
+                  ].filter(Boolean)],
                 ].map(([title, lines]: any) => (
                   <div key={title} style={{ background: '#F8F9FB', borderRadius: '8px', padding: '12px 14px', fontSize: '11px' }}>
                     <div style={{ fontWeight: '700', color: '#1A2130', marginBottom: '6px' }}>{title}</div>
@@ -1057,7 +1063,6 @@ export default function Commercial() {
                 </div>
               )}
 
-              {/* DOCUMENTS */}
               <div style={{ borderTop: '1px solid #E2E6EA', paddingTop: '14px', marginBottom: '16px' }}>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', marginBottom: '10px' }}>📎 Documents</div>
                 {DOC_CATS.map(cat => {
@@ -1096,7 +1101,6 @@ export default function Commercial() {
             </div>
           )}
 
-          {/* ETAT VIDE */}
           {!selected && !showForm && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: '10px', color: '#8A95A3' }}>
               <div style={{ fontSize: '48px', opacity: .2 }}>💼</div>
@@ -1110,7 +1114,6 @@ export default function Commercial() {
         </div>
       </div>
 
-      {/* STATS BAS */}
       <div style={{ background: '#253044', padding: '6px 16px', display: 'flex', gap: '20px', flexShrink: 0 }}>
         {[
           [factures.length, 'Total'],
