@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import Navbar from '../../src/components/Navbar'
@@ -24,7 +24,8 @@ export default function Scolaire() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
   const [creating, setCreating] = useState(false)
-  const [newCircuit, setNewCircuit] = useState({ name: '', code: '', direction: 'aller', notes: '' })
+  const [newCircuit, setNewCircuit] = useState({ name: '', code: '', direction: 'aller', heure_debut: '', heure_fin: '', notes: '' })
+  const [editingHeures, setEditingHeures] = useState(false)
   const [pendingStops, setPendingStops] = useState([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -90,6 +91,7 @@ export default function Scolaire() {
       id: circuitId, company_id: COMPANY_ID,
       name: newCircuit.name, code: newCircuit.code,
       direction: newCircuit.direction, notes: newCircuit.notes, active: true,
+      heure_debut: newCircuit.heure_debut || null, heure_fin: newCircuit.heure_fin || null,
     })
     if (circErr) { setMessage('Erreur : ' + circErr.message); setSaving(false); return }
 
@@ -378,6 +380,45 @@ export default function Scolaire() {
                       </div>
                     </div>
                   </div>
+                  {/* Heures du circuit */}
+                  <div style={{ background: '#F8F9FB', borderRadius: '6px', padding: '8px 10px', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#1A2130' }}>⏰ Horaires du circuit</span>
+                      <button onClick={() => setEditingHeures(!editingHeures)}
+                        style={{ background: 'none', border: 'none', color: '#0E5AA7', fontSize: '10px', fontWeight: '600', cursor: 'pointer' }}>
+                        {editingHeures ? '✕' : '✏️ Modifier'}
+                      </button>
+                    </div>
+                    {editingHeures ? (
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: '9px', color: '#8A95A3', display: 'block', marginBottom: '2px' }}>Début</label>
+                          <input type="time" defaultValue={selected.heure_debut || ''} id="edit-heure-debut"
+                            style={{ width: '100%', padding: '5px 7px', border: '1px solid #D0D4DA', borderRadius: '4px', fontSize: '11px', fontFamily: 'inherit' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: '9px', color: '#8A95A3', display: 'block', marginBottom: '2px' }}>Fin</label>
+                          <input type="time" defaultValue={selected.heure_fin || ''} id="edit-heure-fin"
+                            style={{ width: '100%', padding: '5px 7px', border: '1px solid #D0D4DA', borderRadius: '4px', fontSize: '11px', fontFamily: 'inherit' }} />
+                        </div>
+                        <button onClick={async () => {
+                          const debut = (document.getElementById('edit-heure-debut') as HTMLInputElement)?.value
+                          const fin   = (document.getElementById('edit-heure-fin') as HTMLInputElement)?.value
+                          await supabase.from('circuits').update({ heure_debut: debut, heure_fin: fin }).eq('id', selected.id)
+                          setEditingHeures(false)
+                          loadAll()
+                          setSelected(s => ({ ...s, heure_debut: debut, heure_fin: fin }))
+                        }} style={{ background: '#1A9E50', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '10px', fontWeight: '700', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', alignSelf: 'flex-end' }}>
+                          💾
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '11px', color: '#4A5568' }}>
+                        {selected.heure_debut ? `${selected.heure_debut} → ${selected.heure_fin || '—'}` : <span style={{ color: '#8A95A3' }}>Non renseigné</span>}
+                      </div>
+                    )}
+                  </div>
+
                   <div style={{ display: 'flex', gap: '5px' }}>
                     <button onClick={() => handleToggleActive(selected)}
                       style={{ flex: 1, background: selected.active ? '#FFEBEE' : '#E8F5E9', border: 'none', color: selected.active ? '#C62828' : '#1A9E50', fontFamily: 'inherit', fontSize: '10px', fontWeight: '600', padding: '5px', borderRadius: '5px', cursor: 'pointer' }}>
