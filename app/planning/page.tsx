@@ -252,6 +252,106 @@ export default function Planning() {
     alert(`✅ Planning du ${dateLabel} envoyé !\n${isVacances ? 'Vacances scolaires — VACS générés' : `${Math.floor(created/4)} circuit(s) scolaire(s) générés`}`)
   }
 
+  async function envoiJourConducteur(driverId, date) {
+    setSendingPlanning(true)
+    const dateStr = dateKey(date)
+    const JOURS_MAP = { 0:'dimanche', 1:'lundi', 2:'mardi', 3:'mercredi', 4:'jeudi', 5:'vendredi', 6:'samedi' }
+    const jourNom = JOURS_MAP[date.getDay()]
+
+    const { data: periodes } = await supabase.from('calendrier_scolaire').select('*')
+      .eq('company_id', COMPANY_ID).eq('type', 'cours')
+    const isScolaire = (periodes || []).some(p => dateStr >= p.date_debut && dateStr <= p.date_fin)
+
+    const { data: driverDetails } = await supabase.from('driver_details')
+      .select('dispo_vacances').eq('id', driverId).single()
+    const dispoVacances = driverDetails?.dispo_vacances || false
+
+    const toTime = (m) => `${String(Math.floor(Math.max(0,m)/60)%24).padStart(2,'0')}:${String(Math.max(0,m)%60).padStart(2,'0')}`
+
+    const planKey = `${driverId}_${dateStr}`
+    let planning = plannings[planKey]
+
+    if (!isScolaire) {
+      const dayType  = dispoVacances ? 'VACS DISPO' : 'VACS'
+      const dayColor = dispoVacances ? '#D4720A' : '#1565C0'
+      if (!planning) {
+        const { data: newPlan } = await supabase.from('planning').insert({
+          id: generateId(), company_id: COMPANY_ID, driver_id: driverId,
+          date: dateStr, day_type: dayType, day_color: dayColor,
+          valide: true, valide_at: new Date().toISOString(),
+        }).select().single()
+        if (newPlan) {
+          await supabase.from('slots').insert({
+            id: generateId(), company_id: COMPANY_ID, planning_id: newPlan.id,
+            label: dayType, type: 'repos', color: dayColor,
+            start_time: '00:00', end_time: '23:59', from_label: '', to_label: '', vehicle: '', notes: '',
+          })
+        }
+      } else {
+        await supabase.from('planning').update({ valide: true, valide_at: new Date().toISOString() }).eq('id', planning.id)
+      }
+      await loadSlots()
+      setSendingPlanning(false)
+      setPanel(null)
+      alert(`✅ Journée ${dayType} envoyée pour le ${date.toLocaleDateString('fr-FR')}`)
+      return
+    }
+
+    // Période scolaire
+    const { data: driverCircuits } = await supabase.from('driver_circuits')
+      .select('*, circuits(id, name, code, heure_debut, heure_fin)')
+      .eq('driver_id', driverId).eq('actif', true)
+
+    const myCircuits = (driverCircuits || []).filter(dc => dc.jours?.includes(jourNom))
+
+    if (!planning) {
+      const { data: newPlan } = await supabase.from('planning').insert({
+        id: generateId(), company_id: COMPANY_ID, driver_id: driverId,
+        date: dateStr, day_type: myCircuits.length > 0 ? 'Scolaire' : 'Repos',
+        day_color: myCircuits.length > 0 ? '#1A2130' : '#1565C0',
+        valide: true, valide_at: new Date().toISOString(),
+      }).select().single()
+      if (newPlan) planning = newPlan
+    } else {
+      await supabase.from('planning').update({ valide: true, valide_at: new Date().toISOString() }).eq('id', planning.id)
+    }
+
+    if (!planning) { setSendingPlanning(false); return }
+
+    let created = 0
+    for (const dc of myCircuits) {
+      const circuit = dc.circuits
+      if (!circuit) continue
+      const { data: existing } = await supabase.from('slots').select('id').eq('planning_id', planning.id).eq('label', circuit.code || circuit.name)
+      if (existing && existing.length > 0) continue
+      const debut  = circuit.heure_debut || '07:00'
+      const fin    = circuit.heure_fin   || '08:30'
+      const debMin = parseInt(debut.split(':')[0])*60 + parseInt(debut.split(':')[1])
+      const finMin  = parseInt(fin.split(':')[0])*60   + parseInt(fin.split(':')[1])
+      const skeleton = [
+        { label: 'PDS', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-20), end_time: toTime(debMin-10), from_label: 'Garage Janzé', to_label: 'Garage Janzé' },
+        { label: 'HLP', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-10), end_time: debut, from_label: 'Garage Janzé', to_label: circuit.name },
+        { label: circuit.code || circuit.name, type: 'scolaire', color: '#1A2130', start_time: debut, end_time: fin, from_label: circuit.name, to_label: circuit.name },
+        { label: 'FDS', type: 'neutre', color: '#9AA3B2', start_time: fin, end_time: toTime(finMin+10), from_label: circuit.name, to_label: 'Garage Janzé' },
+      ]
+      for (const slot of skeleton) {
+        await supabase.from('slots').insert({
+          id: generateId(), company_id: COMPANY_ID, planning_id: planning.id,
+          label: slot.label, type: slot.type, color: slot.color,
+          start_time: slot.start_time, end_time: slot.end_time,
+          from_label: slot.from_label, to_label: slot.to_label,
+          vehicle: '', notes: '',
+        })
+        created++
+      }
+    }
+
+    await loadSlots()
+    setSendingPlanning(false)
+    setPanel(null)
+    alert(`✅ Planning du ${date.toLocaleDateString('fr-FR')} envoyé !\n${Math.floor(created/4)} circuit(s) générés`)
+  }
+
   async function loadSlots() {
     const dates = getWeekDates(weekOffset)
     const from = dateKey(dates[0])
@@ -660,6 +760,10 @@ export default function Planning() {
             <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
               {panel.type === 'new' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button onClick={() => envoiJourConducteur(panel.driverId, panel.date)} disabled={sendingPlanning}
+                    style={{ background: sendingPlanning ? '#8A95A3' : '#1A9E50', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '9px', borderRadius: '6px', cursor: 'pointer', width: '100%' }}>
+                    {sendingPlanning ? '⏳ Envoi…' : '📤 Envoyer ce jour au conducteur'}
+                  </button>
                   <div style={{ display: 'flex', background: '#F0F2F5', borderRadius: '7px', padding: '3px', gap: '2px' }}>
                     {[['manuel','✏️ Manuel'], ['commande', `📋 Commande (${orders.length})`], ['circuit', `🏫 Scolaire (${circuits.length})`]].map(([tab, label]) => (
                       <button key={tab} onClick={() => setNewTab(tab)}
