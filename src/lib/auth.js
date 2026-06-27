@@ -35,7 +35,6 @@ export const MODULES = [
   { key: 'anomalies',   label: 'Anomalies',   icon: '⚠️', href: '/anomalies' },
   { key: 'scolaire',    label: 'Scolaire',    icon: '🏫', href: '/scolaire' },
   { key: 'adresses',    label: 'Adresses',    icon: '📍', href: '/adresses' },
-  { key: 'documents',   label: 'Documents',   icon: '📄', href: '/documents' },
   { key: 'permissions', label: 'Permissions', icon: '🔐', href: '/permissions' },
 ]
 
