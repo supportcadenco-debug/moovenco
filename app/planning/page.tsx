@@ -627,11 +627,21 @@ export default function Planning() {
   }
 
   async function handleDeleteSlot(slotId) {
-    if (!confirm('Supprimer ce créneau ?')) return
-    await supabase.from('slots').delete().eq('id', slotId)
-    setPanel(null)
-    loadSlots()
+  if (!confirm('Supprimer ce créneau ?')) return
+  // Récupérer le slot avant suppression pour savoir si c'est un occasionnel lié à une commande
+  const { data: slot } = await supabase.from('slots').select('*').eq('id', slotId).single()
+  await supabase.from('slots').delete().eq('id', slotId)
+  // Si c'était un slot occasionnel, remettre la commande en "confirme"
+  if (slot?.type === 'occasionnel' && slot?.label) {
+    await supabase.from('orders')
+      .update({ status: 'confirme', assigned_driver: null, assigned_vehicle: null })
+      .eq('reference', slot.label)
+      .eq('company_id', COMPANY_ID)
   }
+  setPanel(null)
+  loadSlots()
+  loadOrders()
+}
 
   const dates = getWeekDates(weekOffset)
   const d0 = dates[0], d6 = dates[6]
@@ -786,23 +796,52 @@ export default function Planning() {
                         <div style={{ textAlign: 'center', color: '#8A95A3', fontSize: '11px', padding: '20px' }}>Aucune commande confirmée disponible</div>
                       ) : (
                         filteredOrders.map(order => (
-                          <div key={order.id} onClick={() => { if (!saving) fillFromOrder(order) }}
-                            style={{ background: '#F8F9FB', border: '1px solid #D0D4DA', borderRadius: '7px', padding: '10px 12px', cursor: 'pointer' }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#0E5AA7'; e.currentTarget.style.background = '#E8F0FB' }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0D4DA'; e.currentTarget.style.background = '#F8F9FB' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                              <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>{order.reference}</div>
-                              <span style={{ background: '#E8F5E9', color: '#1A9E50', fontSize: '8px', fontWeight: '700', padding: '2px 5px', borderRadius: '6px' }}>{order.status === 'confirme' ? 'Confirmé' : 'Affecté'}</span>
-                            </div>
-                            <div style={{ fontSize: '10px', color: '#4A5568' }}>📍 {order.destination}</div>
-                            {order.date_service && <div style={{ fontSize: '10px', color: '#8A95A3' }}>📅 {new Date(order.date_service).toLocaleDateString('fr-FR')}</div>}
-                            {order.passengers && <div style={{ fontSize: '10px', color: '#8A95A3' }}>👥 {order.passengers} passagers</div>}
-                            <div style={{ fontSize: '10px', color: '#0E5AA7', fontWeight: '600', marginTop: '5px' }}>→ Cliquer pour pré-remplir</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
+  <div key={order.id} onClick={() => { if (!saving) fillFromOrder(order) }}
+    style={{ background: '#F8F9FB', border: '1px solid #D0D4DA', borderRadius: '7px', padding: '10px 12px', cursor: 'pointer' }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = '#0E5AA7'; e.currentTarget.style.background = '#E8F0FB' }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0D4DA'; e.currentTarget.style.background = '#F8F9FB' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+      <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>{order.reference}</div>
+      <span style={{ background: '#E8F5E9', color: '#1A9E50', fontSize: '8px', fontWeight: '700', padding: '2px 5px', borderRadius: '6px' }}>Confirmé</span>
+    </div>
+    {order.client_responsable && <div style={{ fontSize: '10px', color: '#4A5568', marginBottom: '2px' }}>👤 {order.client_responsable}</div>}
+    <div style={{ fontSize: '10px', color: '#4A5568' }}>📍 {order.destination}</div>
+    {order.date_service && <div style={{ fontSize: '10px', color: '#8A95A3' }}>📅 {new Date(order.date_service).toLocaleDateString('fr-FR')}</div>}
+    {order.passengers && <div style={{ fontSize: '10px', color: '#8A95A3' }}>👥 {order.passengers} passagers</div>}
+    {order.vehicule_plaque && <div style={{ fontSize: '10px', color: '#8A95A3' }}>🚌 {order.vehicule_plaque}</div>}
+    {(order.heure_depart_garage || order.heure_prise_charge || order.heure_retour) && (
+      <div style={{ marginTop: '5px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {order.heure_depart_garage && <span style={{ background: '#F0F2F5', color: '#4A5568', fontSize: '9px', padding: '2px 6px', borderRadius: '4px' }}>🚌 Garage {order.heure_depart_garage}</span>}
+        {order.heure_prise_charge && <span style={{ background: '#F0F2F5', color: '#4A5568', fontSize: '9px', padding: '2px 6px', borderRadius: '4px' }}>⬆️ PDC {order.heure_prise_charge}</span>}
+        {order.heure_retour && <span style={{ background: '#F0F2F5', color: '#4A5568', fontSize: '9px', padding: '2px 6px', borderRadius: '4px' }}>⬇️ Ret. {order.heure_retour}</span>}
+        {order.heure_retour_garage && <span style={{ background: '#F0F2F5', color: '#4A5568', fontSize: '9px', padding: '2px 6px', borderRadius: '4px' }}>🏠 Garage {order.heure_retour_garage}</span>}
+      </div>
+    )}
+    {(order.lieu_prise_charge || order.origin) && (
+      <a href={`https://maps.google.com/?q=${encodeURIComponent(order.lieu_prise_charge || order.origin)}`}
+        target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+        style={{ display: 'block', marginTop: '4px', fontSize: '9px', color: '#0E5AA7', textDecoration: 'none', fontWeight: '600' }}>
+        🗺 Prise en charge : {order.lieu_prise_charge || order.origin}
+      </a>
+    )}
+    {(order.lieu_depose || order.destination) && (
+      <a href={`https://maps.google.com/?q=${encodeURIComponent(order.lieu_depose || order.destination)}`}
+        target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+        style={{ display: 'block', marginTop: '2px', fontSize: '9px', color: '#0E5AA7', textDecoration: 'none', fontWeight: '600' }}>
+        🗺 Dépose : {order.lieu_depose || order.destination}
+      </a>
+    )}
+    {order.notes && (
+      <div style={{ marginTop: '4px', fontSize: '9px', color: '#8A95A3', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        📝 {order.notes}
+      </div>
+    )}
+    <div style={{ fontSize: '10px', color: '#0E5AA7', fontWeight: '600', marginTop: '6px', borderTop: '1px solid #E2E6EA', paddingTop: '5px' }}>→ Cliquer pour pré-remplir le planning</div>
+  </div>
+))
+      )}
+    </div>
+          )}
 
                   {newTab === 'circuit' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
