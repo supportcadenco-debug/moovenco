@@ -157,14 +157,6 @@ export default function Atelier() {
   const si = (key) => ({ target: { value } }) => setIntForm(f => ({ ...f, [key]: value }))
   const filtered = vehicles.filter(v => !search || v.plate.toLowerCase().includes(search.toLowerCase()) || v.name?.toLowerCase().includes(search.toLowerCase()))
 
-  const DOC_CATS_VEHICULE = [
-    { key: 'carte_grise',  label: '📋 Carte grise' },
-    { key: 'assurance',    label: '🛡️ Assurance' },
-    { key: 'ct',           label: '🔍 Contrôle technique' },
-    { key: 'tachygraphe',  label: '⏱️ Tachygraphe' },
-    { key: 'autre',        label: '📎 Autre' },
-  ]
-
   async function loadVehDocs(vehicleId) {
     const { data } = await supabase.from('module_documents').select('*')
       .eq('entity_id', vehicleId).order('created_at', { ascending: false })
