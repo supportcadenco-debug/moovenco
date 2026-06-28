@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
     const attachments = pdfBase64 ? [{
       filename: pdfName || 'document.pdf',
-      content: pdfBase64,
+      content: Buffer.from(pdfBase64, 'base64'),
     }] : []
 
     const { data, error } = await resend.emails.send({
