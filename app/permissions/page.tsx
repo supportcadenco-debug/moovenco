@@ -42,7 +42,6 @@ export default function Permissions() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [selectedRole, setSelectedRole] = useState('exploitant')
-  if (!ready) return null
 
   useEffect(() => { loadPermissions() }, [])
 
@@ -74,6 +73,11 @@ export default function Permissions() {
 
   const currentRole = ROLES.find(r => r.value === selectedRole)
 
+  if (!ready) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
+    </div>
+  )
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
       <Navbar currentPage="permissions" />

@@ -61,7 +61,6 @@ export default function Atelier() {
   const fileRef = useRef(null)
   const [drivers, setDrivers] = useState([])
   const [assigningDriver, setAssigningDriver] = useState(false)
-  if (!ready) return null
 
   useEffect(() => { loadAll() }, [])
 
@@ -208,6 +207,11 @@ export default function Atelier() {
     setAssigningDriver(false)
   }
 
+  if (!ready) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
+    </div>
+  )
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
 

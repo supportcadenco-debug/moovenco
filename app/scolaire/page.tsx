@@ -39,7 +39,6 @@ export default function Scolaire() {
   const [importText, setImportText] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting] = useState(false)
-  if (!ready) return null
 
   useEffect(() => { loadAll() }, [])
 
@@ -209,6 +208,11 @@ export default function Scolaire() {
   const filteredAddresses = addresses.filter(a => !stopSearch || a.name?.toLowerCase().includes(stopSearch.toLowerCase()) || a.city?.toLowerCase().includes(stopSearch.toLowerCase()))
   const nc = (key) => ({ target: { value } }) => setNewCircuit(f => ({ ...f, [key]: value }))
 
+  if (!ready) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
+    </div>
+  )
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
 

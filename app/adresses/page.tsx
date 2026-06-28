@@ -58,7 +58,6 @@ export default function Adresses() {
   const [geocodeResults, setGeocodeResults] = useState([])
   const [geocoding, setGeocoding] = useState(false)
   const [geocodeQuery, setGeocodeQuery] = useState('')
-  if (!ready) return null
 
   useEffect(() => { loadAddresses() }, [])
 
@@ -150,6 +149,11 @@ export default function Adresses() {
 
   const s = (key) => ({ target: { value } }) => setForm(f => ({ ...f, [key]: value }))
 
+  if (!ready) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
+    </div>
+  )
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
 

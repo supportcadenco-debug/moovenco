@@ -34,7 +34,6 @@ export default function Clients() {
   const [uploading, setUploading] = useState(false)
   const [orders, setOrders] = useState<any[]>([])
   const fileRef = useRef<any>(null)
-  if (!ready) return null
 
   useEffect(() => { loadClients() }, [])
 
@@ -122,6 +121,11 @@ export default function Clients() {
   const labelStyle = { fontSize: '10px', fontWeight: '600' as any, color: '#4A5568', display: 'block' as any, marginBottom: '3px' }
   const sectionStyle = { fontSize: '10px', fontWeight: '700' as any, color: '#8A95A3', textTransform: 'uppercase' as any, letterSpacing: '.4px', paddingBottom: '4px', borderBottom: '1px solid #E2E6EA', marginTop: '10px', marginBottom: '8px' }
 
+  if (!ready) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
+    </div>
+  )
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'Inter, system-ui, sans-serif', background: '#F0F2F5' }}>
       <Navbar currentPage="clients" />

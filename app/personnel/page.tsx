@@ -57,6 +57,11 @@ function ExpiryTag({ date, label }) {
   const color = j < 0 ? '#C62828' : j < 30 ? '#D4720A' : j < 90 ? '#1565C0' : '#1A9E50'
   const bg    = j < 0 ? '#FFEBEE' : j < 30 ? '#FFF3E0' : j < 90 ? '#E3F2FD' : '#E8F5E9'
   const tag   = j < 0 ? 'Expiré' : j < 30 ? `${j}j` : new Date(date).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'2-digit' })
+  if (!ready) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
+    </div>
+  )
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 8px', background: bg+'60', borderRadius:'5px', marginBottom:'4px' }}>
       <span style={{ fontSize:'10px', color:'#4A5568' }}>{label}</span>
@@ -118,7 +123,6 @@ export default function Personnel() {
   const [editingCircuits, setEditingCircuits] = useState(false)
   const [staffDocs, setStaffDocs]        = useState([])
   const [uploadingDoc, setUploadingDoc]  = useState(false)
-  if (!ready) return null
 
   useEffect(() => { loadAll() }, [])
 

@@ -58,7 +58,6 @@ export default function Anomalies() {
   const [filterStatus, setFilterStatus] = useState('tous')
   const [filterSeverity, setFilterSeverity] = useState('tous')
   const [search, setSearch] = useState('')
-  if (!ready) return null
 
   useEffect(() => { loadAnomalies() }, [])
 
@@ -117,6 +116,11 @@ export default function Anomalies() {
 
   const s = (key) => ({ target: { value } }) => setForm(f => ({ ...f, [key]: value }))
 
+  if (!ready) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
+    </div>
+  )
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
 
