@@ -1053,7 +1053,7 @@ export default function Planning() {
             const skeleton = [
               { label: 'PDS', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-20), end_time: toTime(debMin-10), from_label: 'Garage Janzé', to_label: 'Garage Janzé' },
               { label: 'HLP', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-10), end_time: debut, from_label: 'Garage Janzé', to_label: circuit.name },
-              { label: circuit.code || circuit.name, type: 'scolaire', color: '#1A2130', start_time: debut, end_time: fin, from_label: circuit.name, to_label: circuit.name, vehicle: circuit.vehicule_defaut || '' },
+              { label: circuit.code || circuit.name, type: 'scolaire', color: '#1A2130', start_time: debut, end_time: fin, from_label: circuit.name, to_label: circuit.name, vehicle: circuit.vehicule_defaut || '', circuit_id: circuit.id },
               { label: 'FDS', type: 'neutre', color: '#9AA3B2', start_time: fin, end_time: toTime(finMin+10), from_label: circuit.name, to_label: 'Garage Janzé' },
             ]
 
@@ -1064,7 +1064,7 @@ export default function Planning() {
                 start_time: slot.start_time, end_time: slot.end_time,
                 from_label: slot.from_label, to_label: slot.to_label,
                 vehicle: slot.vehicle || '', notes: '',
-                circuit_id: slot.circuit_id || null,
+                circuit_id: (slot as any).circuit_id || null,
               })
             }
 
