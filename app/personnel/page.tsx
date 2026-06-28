@@ -20,7 +20,6 @@ const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 const PERMIS = ['D', 'D1', 'C', 'C1', 'CE', 'B', 'BE']
 const JOURS  = ['lundi','mardi','mercredi','jeudi','vendredi']
 
-// Catégories documents — communes à tous
 const DOCS_COMMUNS = [
   { key: 'cni',      label: "🪪 Carte d'identité / Passeport" },
   { key: 'contrat',  label: '📄 Contrat de travail' },
@@ -29,7 +28,6 @@ const DOCS_COMMUNS = [
   { key: 'autre',    label: '📎 Autre' },
 ]
 
-// Catégories documents — conducteurs uniquement
 const DOCS_CONDUCTEUR = [
   { key: 'permis',         label: '🚗 Permis de conduire' },
   { key: 'fimo',           label: '🎓 FIMO' },
@@ -57,11 +55,6 @@ function ExpiryTag({ date, label }) {
   const color = j < 0 ? '#C62828' : j < 30 ? '#D4720A' : j < 90 ? '#1565C0' : '#1A9E50'
   const bg    = j < 0 ? '#FFEBEE' : j < 30 ? '#FFF3E0' : j < 90 ? '#E3F2FD' : '#E8F5E9'
   const tag   = j < 0 ? 'Expiré' : j < 30 ? `${j}j` : new Date(date).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'2-digit' })
-  if (!ready) return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
-      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
-    </div>
-  )
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 8px', background: bg+'60', borderRadius:'5px', marginBottom:'4px' }}>
       <span style={{ fontSize:'10px', color:'#4A5568' }}>{label}</span>
@@ -74,7 +67,6 @@ function CircuitAssigner({ circuits, driverCircuits, onAdd, saving }) {
   const [sel, setSel] = useState('')
   const [jours, setJours] = useState([...JOURS])
   const toggle = j => setJours(p => p.includes(j) ? p.filter(x => x !== j) : [...p, j])
-  // Filtrer circuits déjà assignés
   const available = circuits.filter(c => !driverCircuits.find(dc => dc.circuit_id === c.id))
   return (
     <div style={{ background:'#F8F9FB', borderRadius:'8px', padding:'10px 12px' }}>
@@ -111,7 +103,7 @@ export default function Personnel() {
   const [selected, setSelected]          = useState(null)
   const [filterRole, setFilterRole]      = useState('tous')
   const [search, setSearch]              = useState('')
-  const [tab, setTab]                    = useState('fiche') // fiche | documents | circuits
+  const [tab, setTab]                    = useState('fiche')
   const [form, setForm]                  = useState({ name:'', initials:'', color:'#0E5AA7', role:'conducteur', contract:'', email:'', password:'', is_conducteur_secondaire: false })
   const [driverForm, setDriverForm]      = useState({ permis:[], fimo_expiry:'', fco_expiry:'', visite_medicale:'', carte_conducteur:'', vehicle_habituel:'', dispo_vacances:false, notes:'' })
   const [saving, setSaving]              = useState(false)
@@ -123,6 +115,8 @@ export default function Personnel() {
   const [editingCircuits, setEditingCircuits] = useState(false)
   const [staffDocs, setStaffDocs]        = useState([])
   const [uploadingDoc, setUploadingDoc]  = useState(false)
+  const [absences, setAbsences]          = useState([])
+  const [savingAbsence, setSavingAbsence]= useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -153,10 +147,26 @@ export default function Personnel() {
     setStaffDocs(data || [])
   }
 
+  async function loadAbsences(profileId) {
+    const { data } = await supabase.from('absences').select('*')
+      .eq('conducteur_uid', profileId).order('date_debut', { ascending: false })
+    setAbsences(data || [])
+  }
+
+  async function traiterAbsence(id: string, statut: 'approved' | 'refused') {
+    setSavingAbsence(true)
+    await supabase.from('absences').update({
+      statut,
+      traite_par: authProfile?.name || 'Exploitant',
+      traite_le: new Date().toISOString(),
+    }).eq('id', id)
+    if (selected) await loadAbsences(selected.id)
+    setSavingAbsence(false)
+  }
+
   async function addDriverCircuit(circuitId, jours) {
     if (!selected) return
     setSavingCircuit(true)
-    // Vérifier doublon
     const existing = driverCircuits.find(dc => dc.circuit_id === circuitId)
     if (!existing) {
       await supabase.from('driver_circuits').insert({
@@ -177,7 +187,6 @@ export default function Personnel() {
     if (!file || !selected) return
     setUploadingDoc(true)
     try {
-      // Nettoyer le nom du fichier
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const path = `${selected.id}/${Date.now()}_${safeName}`
       const { error: upErr } = await supabase.storage.from('driver-documents').upload(path, file, { upsert: false })
@@ -190,18 +199,14 @@ export default function Personnel() {
           company_id: COMPANY_ID, profile_id: selected.id,
           nom: file.name, categorie, url: urlData.publicUrl, taille: file.size,
         })
-        if (dbErr) {
-          setMessage('Erreur base de données : ' + dbErr.message)
-        } else {
-          await loadStaffDocs(selected.id)
-        }
+        if (dbErr) setMessage('Erreur base de données : ' + dbErr.message)
+        else await loadStaffDocs(selected.id)
       }
     } catch (err) {
       console.error('Erreur inattendue:', err)
       setMessage('Erreur inattendue lors de l\'upload')
     }
     setUploadingDoc(false)
-    // Reset l'input
     e.target.value = ''
   }
 
@@ -254,31 +259,31 @@ export default function Personnel() {
   }
 
   async function handleSaveDriverDetails() {
-  if (!selected) return
-  setSaving(true)
-  const existing = driverDetails[selected.id]
-  const payload = {
-    id: selected.id,
-    company_id: COMPANY_ID,
-    permis_categories: driverForm.permis?.join(',') || null,
-    fimo_expiry: driverForm.fimo_expiry || null,
-    fco_expiry: driverForm.fco_expiry || null,
-    visite_expiry: driverForm.visite_medicale || null,
-    carte_conducteur_expiry: driverForm.carte_conducteur || null,
-    vehicle_habituel: driverForm.vehicle_habituel || null,
-    dispo_vacances: driverForm.dispo_vacances || false,
-    notes: driverForm.notes || null,
-  }
-  const { error } = existing
-    ? await supabase.from('driver_details').update(payload).eq('id', selected.id)
-    : await supabase.from('driver_details').insert(payload)
-  if (error) setMessage('Erreur : ' + error.message)
-  else {
-    setMessage('✅ Fiche enregistrée')
-    setEditingDriver(false)
-    loadAll()
-  }
-  setSaving(false)
+    if (!selected) return
+    setSaving(true)
+    const existing = driverDetails[selected.id]
+    const payload = {
+      id: selected.id,
+      company_id: COMPANY_ID,
+      permis_categories: driverForm.permis?.join(',') || null,
+      fimo_expiry: driverForm.fimo_expiry || null,
+      fco_expiry: driverForm.fco_expiry || null,
+      visite_expiry: driverForm.visite_medicale || null,
+      carte_conducteur_expiry: driverForm.carte_conducteur || null,
+      vehicle_habituel: driverForm.vehicle_habituel || null,
+      dispo_vacances: driverForm.dispo_vacances || false,
+      notes: driverForm.notes || null,
+    }
+    const { error } = existing
+      ? await supabase.from('driver_details').update(payload).eq('id', selected.id)
+      : await supabase.from('driver_details').insert(payload)
+    if (error) setMessage('Erreur : ' + error.message)
+    else {
+      setMessage('✅ Fiche enregistrée')
+      setEditingDriver(false)
+      loadAll()
+    }
+    setSaving(false)
   }
 
   async function toggleActive(person) {
@@ -304,7 +309,10 @@ export default function Personnel() {
       dispo_vacances:  dd?.dispo_vacances || false,
       notes:           dd?.notes || '',
     })
-    if (isDriverRole(person)) loadDriverCircuits(person.id)
+    if (isDriverRole(person)) {
+      loadDriverCircuits(person.id)
+      loadAbsences(person.id)
+    }
     loadStaffDocs(person.id)
   }
 
@@ -319,11 +327,20 @@ export default function Personnel() {
   })
 
   const dd = selected ? driverDetails[selected.id] : null
-
   const inputSt = { width:'100%', padding:'7px 9px', border:'1px solid #D0D4DA', borderRadius:'5px', fontSize:'11px', fontFamily:'inherit', boxSizing:'border-box' as any }
-
-  // Docs groupés par catégorie
   const allCats = [...DOCS_COMMUNS, ...(selected && isDriverRole(selected) ? DOCS_CONDUCTEUR : [])]
+
+  const STATUT_ABS = {
+    pending:  { label: '⏳ En attente', bg: '#FFF3E0', color: '#D4720A' },
+    approved: { label: '✓ Approuvée',  bg: '#E8F5E9', color: '#1A9E50' },
+    refused:  { label: '✕ Refusée',    bg: '#FFEBEE', color: '#C62828' },
+  }
+
+  if (!ready) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
+    </div>
+  )
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column', fontFamily:'Inter, sans-serif', background:'#ECEEF1' }}>
@@ -401,9 +418,9 @@ export default function Personnel() {
                         </td>
                         <td style={{ padding:'10px 14px', fontSize:'11px', color:'#4A5568' }}>{person.contract || '—'}</td>
                         <td style={{ padding:'10px 14px' }}>
-                          {pd?.permis?.length > 0 ? (
+                          {pd?.permis_categories ? (
                             <div style={{ display:'flex', gap:'3px', flexWrap:'wrap' }}>
-                              {pd.permis.map(p => <span key={p} style={{ background:'#1A2130', color:'white', fontSize:'9px', fontWeight:'700', padding:'2px 5px', borderRadius:'4px' }}>{p}</span>)}
+                              {pd.permis_categories.split(',').filter(Boolean).map(p => <span key={p} style={{ background:'#1A2130', color:'white', fontSize:'9px', fontWeight:'700', padding:'2px 5px', borderRadius:'4px' }}>{p.trim()}</span>)}
                             </div>
                           ) : <span style={{ fontSize:'10px', color:'#8A95A3' }}>—</span>}
                         </td>
@@ -439,10 +456,15 @@ export default function Personnel() {
 
             {/* ONGLETS */}
             {selected && !showForm && (
-              <div style={{ display:'flex', borderBottom:'1px solid #E2E6EA', background:'white', flexShrink:0 }}>
-                {[['fiche','📋 Fiche'],['documents','📄 Documents'],['circuits','🏫 Circuits']].map(([k,l]) => (
+              <div style={{ display:'flex', borderBottom:'1px solid #E2E6EA', background:'white', flexShrink:0, overflowX:'auto' }}>
+                {[
+                  ['fiche','📋 Fiche'],
+                  ['documents','📄 Docs'],
+                  ['circuits','🏫 Circuits'],
+                  ...(isDriverRole(selected) ? [['absences','🧳 Absences']] : []),
+                ].map(([k,l]) => (
                   <button key={k} onClick={() => setTab(k)}
-                    style={{ flex:1, background:'none', border:'none', borderBottom: tab===k?'2px solid #0E5AA7':'2px solid transparent', color: tab===k?'#0E5AA7':'#8A95A3', fontFamily:'inherit', fontSize:'11px', fontWeight:'600', padding:'8px 4px', cursor:'pointer' }}>
+                    style={{ flex:1, background:'none', border:'none', borderBottom: tab===k?'2px solid #0E5AA7':'2px solid transparent', color: tab===k?'#0E5AA7':'#8A95A3', fontFamily:'inherit', fontSize:'10px', fontWeight:'600', padding:'8px 4px', cursor:'pointer', whiteSpace:'nowrap' }}>
                     {l}
                   </button>
                 ))}
@@ -456,8 +478,7 @@ export default function Personnel() {
                 <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
                   <div>
                     <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'4px' }}>Nom complet *</label>
-                    <input value={form.name} onChange={handleNameChange} placeholder="Dupont Jean"
-                      style={{ ...inputSt }} />
+                    <input value={form.name} onChange={handleNameChange} placeholder="Dupont Jean" style={{ ...inputSt }} />
                   </div>
                   <div>
                     <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'4px' }}>Initiales</label>
@@ -475,8 +496,7 @@ export default function Personnel() {
                   </div>
                   <div>
                     <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'4px' }}>Rôle *</label>
-                    <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                      style={{ ...inputSt }}>
+                    <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} style={{ ...inputSt }}>
                       {ROLES.map(r => <option key={r.value} value={r.value}>{r.icon} {r.label}</option>)}
                     </select>
                   </div>
@@ -489,8 +509,7 @@ export default function Personnel() {
                   )}
                   <div>
                     <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'4px' }}>Type de contrat</label>
-                    <select value={form.contract} onChange={e => setForm(f => ({ ...f, contract: e.target.value }))}
-                      style={{ ...inputSt }}>
+                    <select value={form.contract} onChange={e => setForm(f => ({ ...f, contract: e.target.value }))} style={{ ...inputSt }}>
                       <option value="">— Sélectionner —</option>
                       {['CDI temps plein','CDI temps partiel','CDI 28h','CDI 30h','CDI 35h','CDD','Intérim','Alternance','Gérant'].map(c => <option key={c}>{c}</option>)}
                     </select>
@@ -500,13 +519,11 @@ export default function Personnel() {
                       <div style={{ fontSize:'10px', fontWeight:'700', color:'#0E5AA7' }}>🔐 Accès appli conducteur</div>
                       <div>
                         <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'4px' }}>Email *</label>
-                        <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="jean.dupont@rgom.fr"
-                          style={{ ...inputSt }} />
+                        <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="jean.dupont@rgom.fr" style={{ ...inputSt }} />
                       </div>
                       <div>
                         <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'4px' }}>Mot de passe provisoire *</label>
-                        <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••"
-                          style={{ ...inputSt }} />
+                        <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" style={{ ...inputSt }} />
                       </div>
                     </div>
                   )}
@@ -521,7 +538,6 @@ export default function Personnel() {
               {/* ── ONGLET FICHE ── */}
               {selected && !showForm && tab === 'fiche' && (
                 <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-                  {/* En-tête */}
                   <div style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px', background:'#F8F9FB', borderRadius:'8px' }}>
                     <div style={{ width:'50px', height:'50px', borderRadius:'50%', background:selected.color, color:'white', fontSize:'16px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center' }}>
                       {selected.initials}
@@ -544,7 +560,6 @@ export default function Personnel() {
                     <div><strong style={{ color:'#1A2130' }}>Statut :</strong> {selected.active ? '✅ Actif' : '❌ Inactif'}</div>
                   </div>
 
-                  {/* Fiche conducteur */}
                   {isDriverRole(selected) && (
                     <div>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
@@ -595,16 +610,16 @@ export default function Personnel() {
                       ) : dd ? (
                         <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
                           {dd.permis_categories && (
-                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'4px' }}>
-                          {dd.permis_categories.split(',').filter(Boolean).map(p => (
-                            <span key={p} style={{ background:'#1A2130', color:'white', fontSize:'10px', fontWeight:'700', padding:'3px 8px', borderRadius:'5px' }}>{p.trim()}</span>
-                          ))}
-                        </div>
-                      )}
-                      <ExpiryTag date={dd.fimo_expiry}            label="FIMO" />
-                      <ExpiryTag date={dd.fco_expiry}             label="FCO" />
-                      <ExpiryTag date={dd.visite_expiry}          label="Visite médicale" />
-                      <ExpiryTag date={dd.carte_conducteur_expiry} label="Carte conducteur" />
+                            <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'4px' }}>
+                              {dd.permis_categories.split(',').filter(Boolean).map(p => (
+                                <span key={p} style={{ background:'#1A2130', color:'white', fontSize:'10px', fontWeight:'700', padding:'3px 8px', borderRadius:'5px' }}>{p.trim()}</span>
+                              ))}
+                            </div>
+                          )}
+                          <ExpiryTag date={dd.fimo_expiry}             label="FIMO" />
+                          <ExpiryTag date={dd.fco_expiry}              label="FCO" />
+                          <ExpiryTag date={dd.visite_expiry}           label="Visite médicale" />
+                          <ExpiryTag date={dd.carte_conducteur_expiry} label="Carte conducteur" />
                           {dd.vehicle_habituel && <div style={{ fontSize:'11px', color:'#4A5568', marginTop:'4px' }}>🚌 <strong>Véhicule habituel :</strong> {dd.vehicle_habituel}</div>}
                           <div style={{ fontSize:'11px', color: dd.dispo_vacances?'#1A9E50':'#8A95A3', marginTop:'4px' }}>
                             {dd.dispo_vacances ? '✅ Disponible vacances' : '❌ Indisponible vacances'}
@@ -639,19 +654,17 @@ export default function Personnel() {
                         </div>
                         {catDocs.length === 0 ? (
                           <div style={{ fontSize:'10px', color:'#8A95A3', padding:'8px 10px', background:'#F8F9FB', borderRadius:'6px' }}>Aucun document</div>
-                        ) : (
-                          catDocs.map(doc => (
-                            <div key={doc.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 10px', background:'white', border:'1px solid #E2E6EA', borderRadius:'6px', marginBottom:'4px' }}>
-                              <span style={{ fontSize:'16px' }}>{doc.nom?.endsWith('.pdf') ? '📄' : '🖼️'}</span>
-                              <a href={doc.url} target="_blank" rel="noreferrer"
-                                style={{ flex:1, fontSize:'11px', fontWeight:'600', color:'#0E5AA7', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                                {doc.nom}
-                              </a>
-                              <span style={{ fontSize:'10px', color:'#8A95A3' }}>{new Date(doc.created_at).toLocaleDateString('fr-FR')}</span>
-                              <button onClick={() => deleteDoc(doc)} style={{ background:'none', border:'none', color:'#C62828', cursor:'pointer', fontSize:'14px' }}>🗑</button>
-                            </div>
-                          ))
-                        )}
+                        ) : catDocs.map(doc => (
+                          <div key={doc.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 10px', background:'white', border:'1px solid #E2E6EA', borderRadius:'6px', marginBottom:'4px' }}>
+                            <span style={{ fontSize:'16px' }}>{doc.nom?.endsWith('.pdf') ? '📄' : '🖼️'}</span>
+                            <a href={doc.url} target="_blank" rel="noreferrer"
+                              style={{ flex:1, fontSize:'11px', fontWeight:'600', color:'#0E5AA7', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                              {doc.nom}
+                            </a>
+                            <span style={{ fontSize:'10px', color:'#8A95A3' }}>{new Date(doc.created_at).toLocaleDateString('fr-FR')}</span>
+                            <button onClick={() => deleteDoc(doc)} style={{ background:'none', border:'none', color:'#C62828', cursor:'pointer', fontSize:'14px' }}>🗑</button>
+                          </div>
+                        ))}
                       </div>
                     )
                   })}
@@ -674,7 +687,6 @@ export default function Personnel() {
                           {editingCircuits ? '✕ Fermer' : '✏️ Modifier'}
                         </button>
                       </div>
-
                       {driverCircuits.length === 0 ? (
                         <div style={{ textAlign:'center', color:'#8A95A3', fontSize:'11px', padding:'12px', background:'#F8F9FB', borderRadius:'8px', marginBottom:'8px' }}>
                           Aucun circuit habituel assigné
@@ -706,7 +718,6 @@ export default function Personnel() {
                           ))}
                         </div>
                       )}
-
                       {editingCircuits && (
                         circuits.length > 0 ? (
                           <CircuitAssigner circuits={circuits} driverCircuits={driverCircuits} onAdd={addDriverCircuit} saving={savingCircuit} />
@@ -717,6 +728,51 @@ export default function Personnel() {
                         )
                       )}
                     </>
+                  )}
+                </div>
+              )}
+
+              {/* ── ONGLET ABSENCES ── */}
+              {selected && !showForm && tab === 'absences' && (
+                <div>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#1A2130', marginBottom:'10px' }}>
+                    🧳 Demandes d'absence — {selected.name}
+                  </div>
+                  {absences.length === 0 ? (
+                    <div style={{ textAlign:'center', color:'#8A95A3', fontSize:'11px', padding:'24px', background:'#F8F9FB', borderRadius:'8px' }}>
+                      Aucune demande d'absence
+                    </div>
+                  ) : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                      {absences.map(a => {
+                        const st = STATUT_ABS[a.statut] || STATUT_ABS.pending
+                        return (
+                          <div key={a.id} style={{ background:'white', border:'1px solid #E2E6EA', borderRadius:'8px', padding:'10px 12px' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                              <span style={{ fontSize:'12px', fontWeight:'700', color:'#1A2130' }}>{a.type}</span>
+                              <span style={{ background: st.bg, color: st.color, fontSize:'9px', fontWeight:'700', padding:'2px 8px', borderRadius:'8px' }}>{st.label}</span>
+                            </div>
+                            <div style={{ fontSize:'11px', color:'#4A5568', marginBottom:'4px' }}>
+                              📅 {new Date(a.date_debut).toLocaleDateString('fr-FR')} → {new Date(a.date_fin).toLocaleDateString('fr-FR')}
+                            </div>
+                            {a.commentaire && <div style={{ fontSize:'10px', color:'#8A95A3', marginBottom:'6px', fontStyle:'italic' }}>{a.commentaire}</div>}
+                            {a.traite_par && <div style={{ fontSize:'10px', color:'#8A95A3' }}>Traité par {a.traite_par}</div>}
+                            {a.statut === 'pending' && (
+                              <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
+                                <button onClick={() => traiterAbsence(a.id, 'approved')} disabled={savingAbsence}
+                                  style={{ flex:1, background:'#1A9E50', border:'none', color:'white', fontFamily:'inherit', fontSize:'11px', fontWeight:'700', padding:'6px', borderRadius:'5px', cursor:'pointer' }}>
+                                  ✓ Approuver
+                                </button>
+                                <button onClick={() => traiterAbsence(a.id, 'refused')} disabled={savingAbsence}
+                                  style={{ flex:1, background:'#FFEBEE', border:'1px solid #FFCDD2', color:'#C62828', fontFamily:'inherit', fontSize:'11px', fontWeight:'700', padding:'6px', borderRadius:'5px', cursor:'pointer' }}>
+                                  ✕ Refuser
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
               )}
@@ -732,7 +788,7 @@ export default function Personnel() {
           [staff.filter(s => s.active).length, 'Actifs'],
           [staff.length, 'Total'],
           [staff.filter(s => s.role === 'conducteur').length, 'Conducteurs'],
-          [Object.values(driverDetails).filter((d: any) => d.visite_medicale && (daysUntil(d.visite_medicale) ?? 999) < 30).length, 'Alertes certifications'],
+          [Object.values(driverDetails).filter((d: any) => d.visite_expiry && (daysUntil(d.visite_expiry) ?? 999) < 30).length, 'Alertes certifications'],
         ].map(([v, l]) => (
           <div key={l as string}>
             <div style={{ fontSize:'14px', fontWeight:'700', color: v > 0 && l === 'Alertes certifications' ? '#EF9A9A' : 'white' }}>{v}</div>
