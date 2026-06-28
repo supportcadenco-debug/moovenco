@@ -247,29 +247,31 @@ export default function Personnel() {
   }
 
   async function handleSaveDriverDetails() {
-    if (!selected) return
-    setSaving(true)
-    const existing = driverDetails[selected.id]
-    const payload = {
-      company_id: COMPANY_ID, id: selected.id,
-      permis: driverForm.permis,
-      fimo_expiry: driverForm.fimo_expiry || null,
-      fco_expiry: driverForm.fco_expiry || null,
-      visite_medicale: driverForm.visite_medicale || null,
-      carte_conducteur: driverForm.carte_conducteur || null,
-      vehicle_habituel: driverForm.vehicle_habituel || null,
-      dispo_vacances: driverForm.dispo_vacances || false,
-      notes: driverForm.notes || null,
-    }
-    if (existing) {
-      await supabase.from('driver_details').update(payload).eq('id', selected.id)
-    } else {
-      await supabase.from('driver_details').insert(payload)
-    }
+  if (!selected) return
+  setSaving(true)
+  const existing = driverDetails[selected.id]
+  const payload = {
+    id: selected.id,
+    company_id: COMPANY_ID,
+    permis_categories: driverForm.permis?.join(',') || null,
+    fimo_expiry: driverForm.fimo_expiry || null,
+    fco_expiry: driverForm.fco_expiry || null,
+    visite_expiry: driverForm.visite_medicale || null,
+    carte_conducteur_expiry: driverForm.carte_conducteur || null,
+    vehicle_habituel: driverForm.vehicle_habituel || null,
+    dispo_vacances: driverForm.dispo_vacances || false,
+    notes: driverForm.notes || null,
+  }
+  const { error } = existing
+    ? await supabase.from('driver_details').update(payload).eq('id', selected.id)
+    : await supabase.from('driver_details').insert(payload)
+  if (error) setMessage('Erreur : ' + error.message)
+  else {
     setMessage('✅ Fiche enregistrée')
     setEditingDriver(false)
     loadAll()
-    setSaving(false)
+  }
+  setSaving(false)
   }
 
   async function toggleActive(person) {
