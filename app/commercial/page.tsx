@@ -71,7 +71,6 @@ const EMPTY_FORM = {
 
 export default function Commercial() {
   const { profile: authProfile, ready } = useAuth('commercial')
-  if (!ready) return null
   const [factures, setFactures] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
   const [tarifs, setTarifs] = useState<any[]>([])
@@ -97,6 +96,7 @@ export default function Commercial() {
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  if (!ready) return null
 
   useEffect(() => { loadAll() }, [])
 

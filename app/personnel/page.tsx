@@ -99,7 +99,6 @@ function CircuitAssigner({ circuits, driverCircuits, onAdd, saving }) {
 
 export default function Personnel() {
   const { profile: authProfile, ready } = useAuth('personnel')
-  if (!ready) return null
   const [staff, setStaff]               = useState([])
   const [driverDetails, setDriverDetails]= useState({})
   const [loading, setLoading]            = useState(true)
@@ -119,6 +118,7 @@ export default function Personnel() {
   const [editingCircuits, setEditingCircuits] = useState(false)
   const [staffDocs, setStaffDocs]        = useState([])
   const [uploadingDoc, setUploadingDoc]  = useState(false)
+  if (!ready) return null
 
   useEffect(() => { loadAll() }, [])
 

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import Navbar from '../../src/components/Navbar'
@@ -46,7 +46,6 @@ async function geocode(query) {
 
 export default function Adresses() {
   const { ready } = useAuth('adresses')
-  if (!ready) return null
   const [addresses, setAddresses] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -59,6 +58,7 @@ export default function Adresses() {
   const [geocodeResults, setGeocodeResults] = useState([])
   const [geocoding, setGeocoding] = useState(false)
   const [geocodeQuery, setGeocodeQuery] = useState('')
+  if (!ready) return null
 
   useEffect(() => { loadAddresses() }, [])
 

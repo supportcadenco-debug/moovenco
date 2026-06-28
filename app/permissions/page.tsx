@@ -37,12 +37,12 @@ const ACCESS_LEVELS = [
 
 export default function Permissions() {
   const { ready } = useAuth('permissions')
-  if (!ready) return null
 
   const [permissions, setPermissions] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [selectedRole, setSelectedRole] = useState('exploitant')
+  if (!ready) return null
 
   useEffect(() => { loadPermissions() }, [])
 

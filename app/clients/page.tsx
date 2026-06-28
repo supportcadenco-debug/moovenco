@@ -23,7 +23,6 @@ const EMPTY_CLIENT = {
 
 export default function Clients() {
   const { ready } = useAuth('clients')
-  if (!ready) return null
   const [clients, setClients] = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
   const [tab, setTab] = useState('infos')
@@ -35,6 +34,7 @@ export default function Clients() {
   const [uploading, setUploading] = useState(false)
   const [orders, setOrders] = useState<any[]>([])
   const fileRef = useRef<any>(null)
+  if (!ready) return null
 
   useEffect(() => { loadClients() }, [])
 

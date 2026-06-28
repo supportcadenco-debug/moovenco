@@ -19,11 +19,11 @@ const DOC_CATS_RH = [
 
 export default function Comptabilite() {
   const { ready } = useAuth('comptabilite')
-  if (!ready) return null
 
   const [activeTab, setActiveTab] = useState('prepaie')
   const [rhDocs, setRhDocs] = useState<any[]>([])
   const [uploadingDoc, setUploadingDoc] = useState(false)
+  if (!ready) return null
 
   async function uploadRhDoc(file: File, categorie: string) {
     if (!file) return

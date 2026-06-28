@@ -20,7 +20,6 @@ function generateId() {
 
 export default function Scolaire() {
   const { ready } = useAuth('scolaire')
-  if (!ready) return null
   const [circuits, setCircuits] = useState([])
   const [stops, setStops] = useState({})
   const [addresses, setAddresses] = useState([])
@@ -40,6 +39,7 @@ export default function Scolaire() {
   const [importText, setImportText] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting] = useState(false)
+  if (!ready) return null
 
   useEffect(() => { loadAll() }, [])
 

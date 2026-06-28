@@ -56,7 +56,6 @@ const EMPTY_FORM = {
 
 export default function Planning() {
   const { profile: authProfile, ready } = useAuth('planning')
-  if (!ready) return null
   const [weekOffset, setWeekOffset] = useState(0)
   const [drivers, setDrivers] = useState([])
   const [plannings, setPlannings] = useState({})
@@ -75,6 +74,7 @@ export default function Planning() {
   const [circuits, setCircuits] = useState([])
   const [circuitSearch, setCircuitSearch] = useState('')
   const [sendingPlanning, setSendingPlanning] = useState(false)
+  if (!ready) return null
 
   useEffect(() => {
     async function init() {

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import Navbar from '../../src/components/Navbar'
@@ -48,7 +48,6 @@ const EMPTY_FORM = {
 
 export default function Anomalies() {
   const { ready } = useAuth('anomalies')
-  if (!ready) return null
   const [anomalies, setAnomalies] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -59,6 +58,7 @@ export default function Anomalies() {
   const [filterStatus, setFilterStatus] = useState('tous')
   const [filterSeverity, setFilterSeverity] = useState('tous')
   const [search, setSearch] = useState('')
+  if (!ready) return null
 
   useEffect(() => { loadAnomalies() }, [])
 

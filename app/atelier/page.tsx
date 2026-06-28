@@ -43,7 +43,6 @@ const EMPTY_INT = { type: 'Vidange', description: '', date_intervention: '', km_
 
 export default function Atelier() {
   const { profile: authProfile, ready } = useAuth('atelier')
-  if (!ready) return null
   const [vehicles, setVehicles] = useState([])
   const [interventions, setInterventions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -62,6 +61,7 @@ export default function Atelier() {
   const fileRef = useRef(null)
   const [drivers, setDrivers] = useState([])
   const [assigningDriver, setAssigningDriver] = useState(false)
+  if (!ready) return null
 
   useEffect(() => { loadAll() }, [])
 
