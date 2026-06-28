@@ -96,6 +96,7 @@ export default function Factures() {
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  const [envoyant, setEnvoyant] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -520,6 +521,186 @@ export default function Factures() {
     loadAll(); setSelected((s: any) => ({ ...s, statut: 'signe' }))
   }
 
+
+  async function envoyerParMail(doc: any) {
+    if (!doc.client_email) {
+      alert('Aucun email client renseigné pour ce document.')
+      return
+    }
+    setEnvoyant(true)
+    try {
+      // Générer le PDF en base64
+      const { jsPDF } = await import('jspdf')
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const W = 210, m = 15, col = W - m * 2
+      const isDevis = doc.type_document === 'devis'
+      const Fmt = (v: any) => parseFloat(v || 0).toFixed(2)
+      const bleu: [number,number,number] = [14, 90, 167]
+      const dark: [number,number,number] = [26, 33, 48]
+      const gris: [number,number,number] = [138, 149, 163]
+
+      pdf.setFillColor(...dark); pdf.rect(0, 0, W, 38, 'F')
+      pdf.setFontSize(20); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255,255,255)
+      pdf.text('RGO', m, 16); pdf.setTextColor(46, 201, 113); pdf.text('Mobilités', m + 14, 16)
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(200,210,220)
+      pdf.text(`${RGO.adresse} — ${RGO.cp} ${RGO.ville}`, m, 22)
+      pdf.text(`Tél : ${RGO.tel}  |  ${RGO.email}`, m, 27)
+      pdf.text(`SIRET : ${RGO.siret}  |  TVA : ${RGO.tva_num}`, m, 32)
+      pdf.setFontSize(22); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255,255,255)
+      pdf.text(isDevis ? 'DEVIS' : 'FACTURE', W - m, 20, { align: 'right' })
+      pdf.setFontSize(11); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(200,210,220)
+      pdf.text(doc.numero, W - m, 27, { align: 'right' })
+
+      let y = 48
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(...gris); pdf.text('ÉMETTEUR', m, y)
+      pdf.setTextColor(...dark); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.text(RGO.nom, m, y + 6)
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'normal')
+      pdf.text(RGO.adresse, m, y + 11); pdf.text(`${RGO.cp} ${RGO.ville}`, m, y + 16); pdf.text(`NAF : ${RGO.naf}`, m, y + 21)
+      const cx = W / 2 + 5
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(...gris); pdf.text('CLIENT', cx, y)
+      pdf.setTextColor(...dark); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.text(doc.client_nom || '—', cx, y + 6)
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'normal')
+      if (doc.client_adresse) pdf.text(doc.client_adresse, cx, y + 11)
+      if (doc.client_cp || doc.client_ville) pdf.text(`${doc.client_cp || ''} ${doc.client_ville || ''}`.trim(), cx, y + 16)
+      if (doc.client_email) pdf.text(doc.client_email, cx, y + 21)
+      if (doc.client_siret) pdf.text(`SIRET : ${doc.client_siret}`, cx, y + 26)
+      pdf.setDrawColor(...gris); pdf.setLineWidth(0.3); pdf.line(W / 2, y - 2, W / 2, y + 30)
+      y += 36
+
+      pdf.setFillColor(245,247,250); pdf.rect(m, y, col, 16, 'F')
+      pdf.setDrawColor(220,225,230); pdf.setLineWidth(0.2); pdf.rect(m, y, col, 16)
+      const dateItems = [
+        [`Date du ${isDevis ? 'devis' : 'facture'}`, new Date(doc.date_facture).toLocaleDateString('fr-FR')],
+        ...(doc.date_service ? [['Date de service', new Date(doc.date_service).toLocaleDateString('fr-FR')]] : []),
+        ...(doc.date_echeance ? [["Date d'échéance", new Date(doc.date_echeance).toLocaleDateString('fr-FR')]] : []),
+        ...(doc.bc_reference ? [['Bon de commande', doc.bc_reference]] : []),
+      ] as string[][]
+      const itemW = col / Math.max(dateItems.length, 1)
+      dateItems.forEach(([label, val], i) => {
+        const x = m + i * itemW + 5
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...gris); pdf.text(label, x, y + 6)
+        pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...dark); pdf.text(val, x, y + 12)
+      })
+      y += 22
+
+      pdf.setFillColor(...dark); pdf.rect(m, y, col, 8, 'F')
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255,255,255)
+      pdf.text('DESCRIPTION', m + 4, y + 5.5); pdf.text('QTÉ', m + col * 0.62, y + 5.5, { align: 'center' })
+      pdf.text('P.U. HT', m + col * 0.78, y + 5.5, { align: 'center' }); pdf.text('TOTAL HT', m + col - 4, y + 5.5, { align: 'right' })
+      y += 8
+      ;(doc.lignes || []).forEach((l: any, i: number) => {
+        const rowH = 8
+        if (i % 2 === 0) { pdf.setFillColor(250,251,252); pdf.rect(m, y, col, rowH, 'F') }
+        pdf.setDrawColor(235,238,242); pdf.setLineWidth(0.1); pdf.rect(m, y, col, rowH)
+        pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...dark)
+        const desc = pdf.splitTextToSize(l.description || '', col * 0.56)
+        pdf.text(desc[0] || '', m + 4, y + 5.5)
+        pdf.text(String(l.quantite || 0), m + col * 0.62, y + 5.5, { align: 'center' })
+        pdf.text(`${Fmt(l.prix_unitaire)} €`, m + col * 0.78, y + 5.5, { align: 'center' })
+        pdf.setFont('helvetica', 'bold'); pdf.text(`${Fmt((l.quantite || 0) * (l.prix_unitaire || 0))} €`, m + col - 4, y + 5.5, { align: 'right' })
+        y += rowH
+      })
+      y += 4
+      const totW = 75, totX = W - m - totW
+      ;[['Total HT', `${Fmt(doc.montant_ht)} €`], [`TVA ${doc.tva_taux}%`, `${Fmt(doc.montant_tva)} €`]].forEach(([label, val]) => {
+        pdf.setFillColor(248,249,251); pdf.rect(totX, y, totW, 7, 'F')
+        pdf.setDrawColor(220,225,230); pdf.rect(totX, y, totW, 7)
+        pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...gris); pdf.text(label, totX + 4, y + 5)
+        pdf.setTextColor(...dark); pdf.text(val, totX + totW - 4, y + 5, { align: 'right' }); y += 7
+      })
+      pdf.setFillColor(...bleu); pdf.rect(totX, y, totW, 10, 'F')
+      pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255,255,255)
+      pdf.text('TOTAL TTC', totX + 4, y + 7); pdf.text(`${Fmt(doc.montant_ttc)} €`, totX + totW - 4, y + 7, { align: 'right' })
+      y += 16
+      if (doc.notes) {
+        pdf.setFillColor(255,248,225)
+        const notesLines = pdf.splitTextToSize(doc.notes, col - 8)
+        const notesH = notesLines.length * 4.5 + 10
+        pdf.rect(m, y, col, notesH, 'F'); pdf.setDrawColor(255,213,79); pdf.rect(m, y, col, notesH)
+        pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...dark); pdf.text('Notes / Observations', m + 4, y + 6)
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(74,85,104); pdf.text(notesLines, m + 4, y + 11)
+        y += notesH + 6
+      }
+      if (isDevis) {
+        y += 4
+        const sigW = (col - 10) / 2
+        pdf.setFillColor(248,249,251); pdf.rect(m, y, sigW, 25, 'F'); pdf.rect(m + sigW + 10, y, sigW, 25, 'F')
+        pdf.setDrawColor(220,225,230); pdf.rect(m, y, sigW, 25); pdf.rect(m + sigW + 10, y, sigW, 25)
+        pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...gris)
+        pdf.text('BON POUR ACCORD — Signature et cachet client', m + 4, y + 6)
+        pdf.text('POUR RGO MOBILITÉS — Signature', m + sigW + 14, y + 6)
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'normal')
+        pdf.text('Date :', m + 4, y + 21); pdf.text('Date :', m + sigW + 14, y + 21)
+      }
+      const footY = 282
+      pdf.setFillColor(...dark); pdf.rect(0, footY, W, 15, 'F')
+      pdf.setFontSize(7.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(200,210,220)
+      pdf.text(`Règlement : Virement bancaire — IBAN : ${RGO.rib}`, W / 2, footY + 5, { align: 'center' })
+      pdf.setTextColor(...gris)
+      pdf.text(`${RGO.nom}  |  SIRET ${RGO.siret}  |  NAF ${RGO.naf}  |  TVA ${RGO.tva_num}`, W / 2, footY + 10, { align: 'center' })
+
+      const pdfBase64 = pdf.output('datauristring').split(',')[1]
+      const pdfName = `${doc.numero}_${(doc.client_nom || 'client').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+
+      // Corps de l'email
+      const subject = isDevis
+        ? `Devis ${doc.numero} — RGO Mobilités Janzé`
+        : `Facture ${doc.numero} — RGO Mobilités Janzé`
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #1A2130; padding: 20px 24px; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 20px;">RGO<span style="color: #2EC971;">Mobilités</span></h1>
+            <p style="color: #8A95A3; margin: 4px 0 0; font-size: 12px;">SAS RGO Mobilités Janzé — 57 rue de Bain, 35150 Janzé</p>
+          </div>
+          <div style="background: #F8F9FB; padding: 24px; border: 1px solid #E2E6EA; border-top: none; border-radius: 0 0 8px 8px;">
+            <p style="color: #1A2130; font-size: 14px;">Bonjour,</p>
+            <p style="color: #4A5568; font-size: 13px; line-height: 1.6;">
+              Veuillez trouver ci-joint ${isDevis ? 'votre devis' : 'votre facture'} <strong>${doc.numero}</strong>
+              ${doc.date_service ? ` pour la prestation du <strong>${new Date(doc.date_service).toLocaleDateString('fr-FR')}</strong>` : ''}.
+            </p>
+            <div style="background: white; border: 1px solid #E2E6EA; border-radius: 6px; padding: 16px; margin: 16px 0;">
+              <table style="width: 100%; font-size: 13px; color: #4A5568;">
+                <tr><td style="padding: 4px 0; color: #8A95A3;">Numéro</td><td style="font-weight: bold; color: #1A2130;">${doc.numero}</td></tr>
+                <tr><td style="padding: 4px 0; color: #8A95A3;">Date</td><td>${new Date(doc.date_facture).toLocaleDateString('fr-FR')}</td></tr>
+                ${doc.date_echeance ? `<tr><td style="padding: 4px 0; color: #8A95A3;">Échéance</td><td>${new Date(doc.date_echeance).toLocaleDateString('fr-FR')}</td></tr>` : ''}
+                <tr><td style="padding: 4px 0; color: #8A95A3;">Montant HT</td><td>${Fmt(doc.montant_ht)} €</td></tr>
+                <tr><td style="padding: 4px 0; color: #8A95A3;">TVA ${doc.tva_taux}%</td><td>${Fmt(doc.montant_tva)} €</td></tr>
+                <tr><td style="padding: 4px 0; color: #1A2130; font-weight: bold;">Total TTC</td><td style="font-weight: bold; color: #0E5AA7; font-size: 16px;">${Fmt(doc.montant_ttc)} €</td></tr>
+              </table>
+            </div>
+            ${isDevis ? '<p style="color: #4A5568; font-size: 12px; font-style: italic;">Ce devis est valable 30 jours. Pour l'accepter, veuillez nous retourner le document signé avec la mention "Bon pour accord".</p>' : ''}
+            <p style="color: #4A5568; font-size: 13px;">Pour tout renseignement, contactez-nous :<br>
+              📞 ${RGO.tel}<br>
+              📧 ${RGO.email}
+            </p>
+            <p style="color: #4A5568; font-size: 13px;">Cordialement,<br><strong>RGO Mobilités Janzé</strong></p>
+          </div>
+          <p style="color: #8A95A3; font-size: 10px; text-align: center; margin-top: 12px;">
+            ${RGO.nom} — SIRET ${RGO.siret} — TVA ${RGO.tva_num}<br>
+            Règlement par virement : IBAN ${RGO.rib}
+          </p>
+        </div>
+      `
+
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: doc.client_email, subject, html, pdfBase64, pdfName })
+      })
+      const result = await res.json()
+      if (result.success) {
+        await marquerEnvoye(doc)
+        setMessage('✅ Email envoyé à ' + doc.client_email)
+      } else {
+        setMessage('❌ Erreur envoi : ' + (result.error?.message || 'Erreur inconnue'))
+      }
+    } catch (e: any) {
+      setMessage('❌ Erreur : ' + e.message)
+    }
+    setEnvoyant(false)
+  }
+
   async function marquerEnvoye(doc: any) {
     await supabase.from('factures').update({ statut: 'envoyee', envoi_mail_statut: 'envoye', envoi_mail_date: new Date().toISOString() }).eq('id', doc.id)
     loadAll(); setSelected((s: any) => ({ ...s, statut: 'envoyee' }))
@@ -881,10 +1062,10 @@ export default function Factures() {
                       🧾 Transformer en facture
                     </button>
                   )}
-                  {selected.type_document === 'facture' && selected.statut === 'emise' && (
-                    <button onClick={() => marquerEnvoye(selected)}
-                      style={{ background: '#E8F5E9', color: '#1A9E50', border: '1px solid #A5D6A7', fontFamily: 'inherit', fontSize: '10px', fontWeight: '700', padding: '4px 10px', borderRadius: '5px', cursor: 'pointer' }}>
-                      ✉ Marquer envoyée
+                  {(selected.type_document === 'facture' || selected.type_document === 'devis') && ['devis','signe','emise'].includes(selected.statut) && (
+                    <button onClick={() => envoyerParMail(selected)} disabled={envoyant}
+                      style={{ background: envoyant ? '#8A95A3' : '#1A9E50', color: 'white', border: 'none', fontFamily: 'inherit', fontSize: '10px', fontWeight: '700', padding: '4px 10px', borderRadius: '5px', cursor: envoyant ? 'not-allowed' : 'pointer' }}>
+                      {envoyant ? '⏳ Envoi…' : '✉ Envoyer par mail'}
                     </button>
                   )}
                   {selected.type_document === 'facture' && selected.statut === 'envoyee' && (
