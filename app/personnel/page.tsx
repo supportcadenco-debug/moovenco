@@ -288,11 +288,11 @@ export default function Personnel() {
     setMessage('')
     const dd = driverDetails[person.id]
     setDriverForm({
-      permis:          dd?.permis || [],
+      permis:          dd?.permis_categories ? dd.permis_categories.split(',') : [],
       fimo_expiry:     dd?.fimo_expiry || '',
       fco_expiry:      dd?.fco_expiry || '',
-      visite_medicale: dd?.visite_medicale || '',
-      carte_conducteur:dd?.carte_conducteur || '',
+      visite_medicale: dd?.visite_expiry || '',
+      carte_conducteur:dd?.carte_conducteur_expiry || '',
       vehicle_habituel:dd?.vehicle_habituel || '',
       dispo_vacances:  dd?.dispo_vacances || false,
       notes:           dd?.notes || '',
@@ -587,15 +587,17 @@ export default function Personnel() {
                         </div>
                       ) : dd ? (
                         <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-                          {dd.permis?.length > 0 && (
-                            <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'4px' }}>
-                              {dd.permis.map(p => <span key={p} style={{ background:'#1A2130', color:'white', fontSize:'10px', fontWeight:'700', padding:'3px 8px', borderRadius:'5px' }}>{p}</span>)}
-                            </div>
-                          )}
-                          <ExpiryTag date={dd.fimo_expiry}      label="FIMO" />
-                          <ExpiryTag date={dd.fco_expiry}       label="FCO" />
-                          <ExpiryTag date={dd.visite_medicale}  label="Visite médicale" />
-                          <ExpiryTag date={dd.carte_conducteur} label="Carte conducteur" />
+                          {dd.permis_categories && (
+                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'4px' }}>
+                          {dd.permis_categories.split(',').filter(Boolean).map(p => (
+                            <span key={p} style={{ background:'#1A2130', color:'white', fontSize:'10px', fontWeight:'700', padding:'3px 8px', borderRadius:'5px' }}>{p.trim()}</span>
+                          ))}
+                        </div>
+                      )}
+                      <ExpiryTag date={dd.fimo_expiry}            label="FIMO" />
+                      <ExpiryTag date={dd.fco_expiry}             label="FCO" />
+                      <ExpiryTag date={dd.visite_expiry}          label="Visite médicale" />
+                      <ExpiryTag date={dd.carte_conducteur_expiry} label="Carte conducteur" />
                           {dd.vehicle_habituel && <div style={{ fontSize:'11px', color:'#4A5568', marginTop:'4px' }}>🚌 <strong>Véhicule habituel :</strong> {dd.vehicle_habituel}</div>}
                           <div style={{ fontSize:'11px', color: dd.dispo_vacances?'#1A9E50':'#8A95A3', marginTop:'4px' }}>
                             {dd.dispo_vacances ? '✅ Disponible vacances' : '❌ Indisponible vacances'}
