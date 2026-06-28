@@ -4,27 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import Navbar from '../../src/components/Navbar'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
-
-const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
-const DELETE_PASSWORD = '1968A'
-
-const STATUTS_DOC: any = {
-  devis:   { label: 'Devis',   color: '#7B3FB5', bg: '#F3E8FF' },
-  signe:   { label: 'Signé',   color: '#D4720A', bg: '#FFF3E0' },
-  emise:   { label: 'Émise',   color: '#1565C0', bg: '#E3F2FD' },
-  envoyee: { label: 'Envoyée', color: '#D4720A', bg: '#FFF3E0' },
-  payee:   { label: 'Payée',   color: '#1A9E50', bg: '#E8F5E9' },
-  annulee: { label: 'Annulée', color: '#C62828', bg: '#FFEBEE' },
-}
-
-const TVA_TAUX = [0, 10, 20]
-const TYPE_VEHICULE = ['autocar', 'minibus']
-const TYPE_CLIENT = ['mairie', 'ecole', 'entreprise', 'particulier']
-const TARIF_MODE = [
-  { key: 'km',          label: 'Au km' },
-  { key: 'journee',     label: 'Journée' },
-  { key: 'multi_jours', label: 'Multi-jours' },
-]
+import { COMPANY_ID, DELETE_PASSWORD, RGO, TVA_TAUX, TYPE_VEHICULE, TYPE_CLIENT, TARIF_MODE, STATUTS_DOC, EMPTY_FORM_DEVIS } from '@/lib/constants'
+import { generateId, getNextNumero, calcMontantHT, calcTotaux, buildLignesAuto, ensureClient, getTarifAuto, formatMontant } from '@/lib/utils'
 
 const DOC_CATS = [
   { key: 'devis_signe', label: '✍️ Devis signé' },
@@ -33,41 +14,9 @@ const DOC_CATS = [
   { key: 'autre',       label: '📎 Autre' },
 ]
 
-function generateId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
-  })
-}
+// generateId et getNextNumero importés depuis @/lib/utils
 
-function getNextNumero(docs: any[], prefix: string) {
-  const year = new Date().getFullYear()
-  const existing = docs.filter(d => d.numero?.startsWith(`${prefix}${year}-`))
-  const max = existing.reduce((acc, d) => {
-    const n = parseInt(d.numero?.split('-')[1] || '0')
-    return n > acc ? n : acc
-  }, 0)
-  return `${prefix}${year}-${String(max + 1).padStart(3, '0')}`
-}
-
-const EMPTY_FORM = {
-  type_document: 'devis',
-  client_id: '', client_nom: '', client_adresse: '', client_cp: '', client_ville: '',
-  client_email: '', client_siret: '', client_type: 'mairie',
-  client_contact_nom: '', client_contact_tel: '',
-  date_facture: new Date().toISOString().split('T')[0],
-  date_service: '', date_echeance: '',
-  tva_taux: 10, tarif_mode: 'km', vehicle_type: 'autocar',
-  distance_km: '', tarif_km: '', tarif_journee: '',
-  nb_jours: 1, frais_attente: 0,
-  bc_reference: '', notes: '',
-  destination: '', origin: '', date_retour: '',
-  passengers: '', vehicule_plaque: '', vehicule_places: '', places_prevues: '',
-  heure_depart_garage: '', heure_prise_charge: '', heure_depart: '',
-  heure_retour: '', heure_retour_garage: '',
-  lieu_prise_charge: '', lieu_depose: '',
-  assigned_driver: '', conducteur_nom: '', conducteur_prenom: '',
-}
+const EMPTY_FORM = EMPTY_FORM_DEVIS
 
 export default function Commercial() {
   const { profile: authProfile, ready } = useAuth('commercial')

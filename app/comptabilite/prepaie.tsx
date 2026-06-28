@@ -113,6 +113,73 @@ export default function Prepaie() {
     return { hTravail, hCoupure, hNuit, hAmplitude, ica, nuits, repasUnique, repasFrance, repasParis, salBase, primeAnc, primeDecouch, primeCoupure, primeICA, heuresNuitMaj, heuresAmpMaj, heuresCoupure, brut, indRepas }
   }
 
+
+  function exportCSV() {
+    if (!selected || !recap) return
+    const days = getDaysInMonth(year, month)
+    const rows = []
+
+    // En-tête
+    rows.push([
+      'Jour', 'Semaine', 'Absence',
+      'H.Conduite', 'H.Autres', 'H.Coupure', 'H.Nuit', 'H.Amplitude', 'ICA',
+      'Repas Unique', 'Repas France', 'Repas Paris', 'Nuits'
+    ].join(';'))
+
+    // Lignes journalières
+    for (let d = 1; d <= days; d++) {
+      const j = getDay(d)
+      const dayLabel = getDayLabel(year, month, d)
+      rows.push([
+        d, dayLabel, j.absence || '',
+        j.heures_conduite || 0, j.heures_autres || 0, j.heures_coupure || 0,
+        j.heures_nuit || 0, j.heures_amplitude || 0, j.ica || 0,
+        j.repas_unique || 0, j.repas_france || 0, j.repas_paris || 0, j.nuits || 0
+      ].join(';'))
+    }
+
+    // Ligne vide
+    rows.push('')
+
+    // Totaux
+    rows.push(['TOTAUX', '', '',
+      recap.hTravail.toFixed(2), '', recap.hCoupure.toFixed(2),
+      recap.hNuit.toFixed(2), recap.hAmplitude.toFixed(2), recap.ica.toFixed(2),
+      recap.repasUnique, recap.repasFrance, recap.repasParis, recap.nuits
+    ].join(';'))
+
+    // Ligne vide
+    rows.push('')
+
+    // Récapitulatif financier
+    rows.push(['ELEMENTS DE BRUT', '', ''].join(';'))
+    rows.push(['10200 Salaire de base', `100h x ${TAUX_HORAIRE}€`, recap.salBase.toFixed(2) + ' €'].join(';'))
+    rows.push(['10350 Prime ancienneté', `2% x ${BASE_ANCIENNETE}€`, recap.primeAnc.toFixed(2) + ' €'].join(';'))
+    rows.push(['622 Prime découcher', `${recap.nuits} nuit(s) x 21.43€`, recap.primeDecouch.toFixed(2) + ' €'].join(';'))
+    rows.push(['623 Prime coupure', '', recap.primeCoupure.toFixed(2) + ' €'].join(';'))
+    rows.push(['678 Prime ICA', `${recap.ica.toFixed(2)}h x ${TAUX_HORAIRE}€`, recap.primeICA.toFixed(2) + ' €'].join(';'))
+    rows.push(['682 H. nuit majorées', `${recap.hNuit.toFixed(2)}h x ${TAUX_HORAIRE}€`, recap.heuresNuitMaj.toFixed(2) + ' €'].join(';'))
+    rows.push(['683 H. amplitude 65%', `${recap.hAmplitude.toFixed(2)}h x ${TAUX_HORAIRE}€`, recap.heuresAmpMaj.toFixed(2) + ' €'].join(';'))
+    rows.push(['685 H. coupure', `${recap.hCoupure.toFixed(2)}h x ${TAUX_HORAIRE}€`, recap.heuresCoupure.toFixed(2) + ' €'].join(';'))
+    rows.push(['SALAIRE BRUT ESTIMÉ', '', recap.brut.toFixed(2) + ' €'].join(';'))
+    rows.push('')
+    rows.push(['INDEMNITES', '', ''].join(';'))
+    rows.push(['8060 Repas unique', `${recap.repasUnique} x 10.77€`, (recap.repasUnique * 10.77).toFixed(2) + ' €'].join(';'))
+    rows.push(['8061 Repas France', `${recap.repasFrance} x 17.45€`, (recap.repasFrance * 17.45).toFixed(2) + ' €'].join(';'))
+    rows.push(['8062 Repas Paris/Etr.', `${recap.repasParis} x 20.94€`, (recap.repasParis * 20.94).toFixed(2) + ' €'].join(';'))
+    rows.push(['Total indemnités', '', recap.indRepas.toFixed(2) + ' €'].join(';'))
+
+    // Générer le fichier
+    const csvContent = '\uFEFF' + rows.join('\n') // BOM pour Excel
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Prepaie_${selected.name.replace(/\s+/g, '_')}_${MOIS[month]}_${year}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const recap = selected ? calcRecap() : null
   const days = getDaysInMonth(year, month)
 
@@ -134,6 +201,10 @@ export default function Prepaie() {
             <span style={{ fontSize: '11px', fontWeight: '700', color: '#2EC971' }}>
               Brut estimé : {recap.brut.toFixed(2)} €
             </span>
+            <button onClick={exportCSV}
+              style={{ background: '#2EC971', border: 'none', color: '#1A2130', fontFamily: 'inherit', fontSize: '10px', fontWeight: '700', padding: '4px 10px', borderRadius: '5px', cursor: 'pointer' }}>
+              📥 Export CSV
+            </button>
           </div>
         )}
       </div>
