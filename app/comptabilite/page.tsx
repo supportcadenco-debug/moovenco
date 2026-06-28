@@ -5,6 +5,7 @@ import Navbar from '../../src/components/Navbar'
 import Prepaie from './prepaie'
 import Factures from './factures'
 import Bulletins from './bulletins'
+import Tarifs from './tarifs'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 
@@ -68,6 +69,7 @@ export default function Comptabilite() {
           ['prepaie',    '📋 Prépaie'],
           ['factures',   '🧾 Factures'],
           ['bulletins',  '💼 Bulletins'],
+          ['tarifs',     '💶 Tarifs'],
           ['documents',  '📎 Documents RH'],
         ].map(([key, label]) => (
           <button key={key} onClick={() => { setActiveTab(key); if (key === 'documents') loadRhDocs() }}
@@ -80,6 +82,7 @@ export default function Comptabilite() {
         {activeTab === 'prepaie'   && <Prepaie />}
         {activeTab === 'factures'  && <Factures />}
         {activeTab === 'bulletins' && <Bulletins />}
+        {activeTab === 'tarifs'    && <Tarifs />}
         {activeTab === 'documents' && (
           <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
             <div style={{ maxWidth: '700px' }}>
