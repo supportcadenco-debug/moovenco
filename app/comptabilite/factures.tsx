@@ -264,8 +264,11 @@ export default function Factures() {
     setEnvoyant(true)
     try {
       const isDevis = doc.type_document === 'devis'
+      console.log('isDevis:', isDevis)
       // Générer le PDF en base64
+      console.log('Génération PDF...')
       const { base64: pdfBase64, filename: pdfName } = await getPDFBase64(doc)
+      console.log('PDF OK, envoi mail...')
       // PDF généré via @/lib/pdf
 
       // Corps de l'email
