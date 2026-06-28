@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await resend.emails.send({
       from: 'RGO Mobilités <onboarding@resend.dev>',
-      to: ['cedrikk35@gmail.com'], // ← TOUS LES MAILS VONT ICI PENDANT LES TESTS
+      to: ['support.cadenco@gmail.com'], // ← TOUS LES MAILS VONT ICI PENDANT LES TESTS
       // to: [to], // ← décommenter quand on passe en production
       subject,
       html,
