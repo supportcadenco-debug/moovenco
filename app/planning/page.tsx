@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/lib/useAuth'
 import { supabase } from '../../src/lib/supabase'
 import DayGantt from './DayGantt'
 import Navbar from '../../src/components/Navbar'
@@ -54,6 +55,8 @@ const EMPTY_FORM = {
 }
 
 export default function Planning() {
+  const { profile: authProfile, ready } = useAuth('planning')
+  if (!ready) return null
   const [weekOffset, setWeekOffset] = useState(0)
   const [drivers, setDrivers] = useState([])
   const [plannings, setPlannings] = useState({})

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Navbar from '../../src/components/Navbar'
 import { supabase } from '../../src/lib/supabase'
+import { useAuth } from '@/lib/useAuth'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 
@@ -21,6 +22,8 @@ const EMPTY_CLIENT = {
 }
 
 export default function Clients() {
+  const { ready } = useAuth('clients')
+  if (!ready) return null
   const [clients, setClients] = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
   const [tab, setTab] = useState('infos')

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Navbar from '../../src/components/Navbar'
 import { supabase } from '../../src/lib/supabase'
+import { useAuth } from '@/lib/useAuth'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 const DELETE_PASSWORD = '1968A'
@@ -69,6 +70,8 @@ const EMPTY_FORM = {
 }
 
 export default function Commercial() {
+  const { profile: authProfile, ready } = useAuth('commercial')
+  if (!ready) return null
   const [factures, setFactures] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
   const [tarifs, setTarifs] = useState<any[]>([])

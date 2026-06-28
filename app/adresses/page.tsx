@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Navbar from '../../src/components/Navbar'
 import { supabase } from '../../src/lib/supabase'
+import { useAuth } from '@/lib/useAuth'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 
@@ -44,6 +45,8 @@ async function geocode(query) {
 }
 
 export default function Adresses() {
+  const { ready } = useAuth('adresses')
+  if (!ready) return null
   const [addresses, setAddresses] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)

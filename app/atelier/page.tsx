@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Navbar from '../../src/components/Navbar'
 import { supabase } from '../../src/lib/supabase'
+import { useAuth } from '@/lib/useAuth'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 const FUEL_TYPES = ['Diesel', 'Essence', 'Électrique', 'Hybride', 'GNV']
@@ -41,6 +42,8 @@ const EMPTY_VEH = { plate: '', name: '', type: 'Autocar', brand: '', model: '', 
 const EMPTY_INT = { type: 'Vidange', description: '', date_intervention: '', km_intervention: '', km_next: '', cost: '', garage: '', status: 'planifie', notes: '' }
 
 export default function Atelier() {
+  const { profile: authProfile, ready } = useAuth('atelier')
+  if (!ready) return null
   const [vehicles, setVehicles] = useState([])
   const [interventions, setInterventions] = useState([])
   const [loading, setLoading] = useState(true)

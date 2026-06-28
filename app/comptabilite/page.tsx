@@ -6,6 +6,7 @@ import Prepaie from './prepaie'
 import Factures from './factures'
 import Bulletins from './bulletins'
 import { supabase } from '../../src/lib/supabase'
+import { useAuth } from '@/lib/useAuth'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 
@@ -17,6 +18,9 @@ const DOC_CATS_RH = [
 ]
 
 export default function Comptabilite() {
+  const { ready } = useAuth('comptabilite')
+  if (!ready) return null
+
   const [activeTab, setActiveTab] = useState('prepaie')
   const [rhDocs, setRhDocs] = useState<any[]>([])
   const [uploadingDoc, setUploadingDoc] = useState(false)
@@ -54,10 +58,7 @@ export default function Comptabilite() {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
-
       <Navbar currentPage="comptabilite" />
-
-      {/* SOUS-ONGLETS */}
       <div style={{ background: 'white', borderBottom: '1px solid #D0D4DA', display: 'flex', padding: '0 16px', flexShrink: 0 }}>
         {[
           ['prepaie',    '📋 Prépaie'],
@@ -71,8 +72,6 @@ export default function Comptabilite() {
           </button>
         ))}
       </div>
-
-      {/* CONTENU */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'prepaie'   && <Prepaie />}
         {activeTab === 'factures'  && <Factures />}

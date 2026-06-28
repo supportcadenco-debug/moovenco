@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/lib/useAuth'
 import { supabase } from '../../src/lib/supabase'
 import Navbar from '../../src/components/Navbar'
 
@@ -97,6 +98,8 @@ function CircuitAssigner({ circuits, driverCircuits, onAdd, saving }) {
 }
 
 export default function Personnel() {
+  const { profile: authProfile, ready } = useAuth('personnel')
+  if (!ready) return null
   const [staff, setStaff]               = useState([])
   const [driverDetails, setDriverDetails]= useState({})
   const [loading, setLoading]            = useState(true)

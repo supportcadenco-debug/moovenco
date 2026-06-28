@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Navbar from '../../src/components/Navbar'
 import { supabase } from '../../src/lib/supabase'
 import dynamic from 'next/dynamic'
+import { useAuth } from '@/lib/useAuth'
 
 const MapCircuit = dynamic(() => import('./MapCircuit'), { ssr: false })
 
@@ -18,6 +19,8 @@ function generateId() {
 }
 
 export default function Scolaire() {
+  const { ready } = useAuth('scolaire')
+  if (!ready) return null
   const [circuits, setCircuits] = useState([])
   const [stops, setStops] = useState({})
   const [addresses, setAddresses] = useState([])

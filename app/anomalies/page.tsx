@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Navbar from '../../src/components/Navbar'
 import { supabase } from '../../src/lib/supabase'
+import { useAuth } from '@/lib/useAuth'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 
@@ -46,6 +47,8 @@ const EMPTY_FORM = {
 }
 
 export default function Anomalies() {
+  const { ready } = useAuth('anomalies')
+  if (!ready) return null
   const [anomalies, setAnomalies] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
