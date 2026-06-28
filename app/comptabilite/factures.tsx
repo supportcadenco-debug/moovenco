@@ -256,6 +256,7 @@ export default function Factures() {
 
 
   async function envoyerParMail(doc: any) {
+    console.log('envoyerParMail appelé', doc.client_email)
     if (!doc.client_email) {
       alert('Aucun email client renseigné pour ce document.')
       return
