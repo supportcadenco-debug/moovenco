@@ -293,7 +293,7 @@ export default function Factures() {
                 <tr><td style="padding: 4px 0; color: #1A2130; font-weight: bold;">Total TTC</td><td style="font-weight: bold; color: #0E5AA7; font-size: 16px;">${Fmt(doc.montant_ttc)} €</td></tr>
               </table>
             </div>
-            ${isDevis ? '<p style="color: #4A5568; font-size: 12px; font-style: italic;">Ce devis est valable 30 jours. Pour l'accepter, veuillez nous retourner le document signé avec la mention "Bon pour accord".</p>' : ''}
+            ${isDevis ? '<p style="color: #4A5568; font-size: 12px; font-style: italic;">Ce devis est valable 30 jours. Pour l&apos;accepter, veuillez nous retourner le document signé avec la mention "Bon pour accord".</p>' : ''}
             <p style="color: #4A5568; font-size: 13px;">Pour tout renseignement, contactez-nous :<br>
               📞 ${RGO.tel}<br>
               📧 ${RGO.email}
