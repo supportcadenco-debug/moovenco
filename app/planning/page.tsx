@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/useAuth'
 import { supabase } from '../../src/lib/supabase'
 import DayGantt from './DayGantt'
 import Navbar from '../../src/components/Navbar'
+import { genererSquelettePourCircuit } from '@/lib/planningEngine'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
@@ -1045,28 +1046,25 @@ export default function Planning() {
             }
             if (!planning) { setSendingPlanning(false); return }
 
-            const debut  = circuit.heure_debut || '07:00'
-            const fin    = circuit.heure_fin   || '08:30'
-            const debMin = parseInt(debut.split(':')[0])*60 + parseInt(debut.split(':')[1])
-            const finMin  = parseInt(fin.split(':')[0])*60   + parseInt(fin.split(':')[1])
-            const toTime  = (m) => `${String(Math.floor(Math.max(0,m)/60)%24).padStart(2,'0')}:${String(Math.max(0,m)%60).padStart(2,'0')}`
+            // Charger les créneaux déjà présents ce jour (anti-doublon)
+            const { data: existingSlots } = await supabase.from('slots')
+              .select('circuit_id, label').eq('planning_id', planning.id)
 
-            const skeleton = [
-              { label: 'PDS', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-20), end_time: toTime(debMin-10), from_label: 'Garage Janzé', to_label: 'Garage Janzé' },
-              { label: 'HLP', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-10), end_time: debut, from_label: 'Garage Janzé', to_label: circuit.name },
-              { label: circuit.code || circuit.name, type: 'scolaire', color: '#1A2130', start_time: debut, end_time: fin, from_label: circuit.name, to_label: circuit.name, vehicle: circuit.vehicule_defaut || '', circuit_id: circuit.id },
-              { label: 'FDS', type: 'neutre', color: '#9AA3B2', start_time: fin, end_time: toTime(finMin+10), from_label: circuit.name, to_label: 'Garage Janzé' },
-            ]
+            // Générer le squelette via le moteur (OSRM + RSE + compression auto)
+            const result = await genererSquelettePourCircuit(
+              planning.id, driverId, circuit.id, existingSlots || []
+            )
 
-            for (const slot of skeleton) {
-              await supabase.from('slots').insert({
-                id: generateId(), company_id: COMPANY_ID, planning_id: planning.id,
-                label: slot.label, type: slot.type, color: slot.color,
-                start_time: slot.start_time, end_time: slot.end_time,
-                from_label: slot.from_label, to_label: slot.to_label,
-                vehicle: slot.vehicle || '', notes: '',
-                circuit_id: (slot as any).circuit_id || null,
-              })
+            if (!result.ok) {
+              setMessage('❌ ' + (result.error || 'Erreur génération'))
+            } else if (result.inserted === 0 && result.error) {
+              setMessage('ℹ️ ' + result.error)
+            } else {
+              let msg = `✅ ${result.inserted} créneaux générés — amplitude ${Math.floor(result.amplitude/60)}h${String(result.amplitude%60).padStart(2,'0')}`
+              if (result.compressionApplied) msg += ' (temps ajustés RSE)'
+              const danger = result.alerts.find(a => a.severity === 'danger')
+              if (danger) msg = '⚠️ ' + danger.message
+              setMessage(msg)
             }
 
             await loadSlots()
