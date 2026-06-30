@@ -63,6 +63,7 @@ export default function Planning() {
   const [slots, setSlots] = useState({})
   const [orders, setOrders] = useState([])
   const [allVehicles, setAllVehicles] = useState([])
+  const [allAddresses, setAllAddresses] = useState([])
   const [loading, setLoading] = useState(true)
   const [panel, setPanel] = useState(null)
   const [gantt, setGantt] = useState(null)
@@ -84,6 +85,7 @@ export default function Planning() {
       loadOrders()
       loadVehicles()
       loadCircuits()
+      loadAddresses()
     }
     init()
   }, [])
@@ -111,6 +113,12 @@ export default function Planning() {
     const { data } = await supabase.from('vehicles').select('*')
       .eq('company_id', COMPANY_ID).eq('active', true).order('plate')
     setAllVehicles(data || [])
+  }
+
+  async function loadAddresses() {
+    const { data } = await supabase.from('addresses').select('id, name, address, lat, lng')
+      .eq('company_id', COMPANY_ID).order('name')
+    setAllAddresses(data || [])
   }
 
   async function loadCircuits() {
@@ -400,6 +408,8 @@ export default function Planning() {
       start_time: slotData.start_time, end_time: slotData.end_time,
       from_label: slotData.from_label || '',
       to_label: slotData.to_label || '',
+      from_address_id: slotData.from_address_id || null,
+      to_address_id: slotData.to_address_id || null,
       vehicle: slotData.vehicle || '',
       notes: slotData.notes || '',
     })
@@ -1001,6 +1011,7 @@ export default function Planning() {
           date={gantt.date}
           slots={gantt.slots}
           vehicles={allVehicles}
+          addresses={allAddresses}
           onAddSlot={async (slot) => {
             await handleCreateSlotFromGantt(slot, gantt.driver.id, gantt.date)
             const planKey = `${gantt.driver.id}_${dateKey(gantt.date)}`

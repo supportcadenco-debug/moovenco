@@ -99,7 +99,7 @@ function SlotRow({ slot, onDelete }) {
 const TOTAL_MIN = 24 * 60
 const HOUR_W = 60
 
-export default function DayGantt({ driver, date, slots, vehicles, orders, circuits, onAddSlot, onDeleteSlot, onClose, onEnvoiJour, sendingPlanning, onFillFromOrder, onFillFromCircuit }) {
+export default function DayGantt({ driver, date, slots, vehicles, orders, circuits, addresses, onAddSlot, onDeleteSlot, onClose, onEnvoiJour, sendingPlanning, onFillFromOrder, onFillFromCircuit }) {
   const [form, setForm] = useState(null)
   const [filterClimatise, setFilterClimatise] = useState(false)
   const [autoNeutral, setAutoNeutral] = useState(true)
@@ -115,7 +115,7 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
     const minutes = Math.round((x / totalW) * TOTAL_MIN / 15) * 15
     const time = minToTime(minutes)
     const endTime = minToTime(Math.min(minutes + 60, TOTAL_MIN - 1))
-    setForm({ label: '', type: 'scolaire', start_time: time, end_time: endTime, from_label: '', to_label: '', vehicle: '', notes: '', climatise_required: false })
+    setForm({ label: '', type: 'scolaire', start_time: time, end_time: endTime, from_label: '', to_label: '', from_address_id: null, to_address_id: null, vehicle: '', notes: '', climatise_required: false })
   }
 
   function handleSlotClick(slot, e) {
@@ -421,10 +421,23 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
                     </div>
                   </div>
 
-                  {[['Départ', 'from_label', 'Janzé - Dépôt RGO'], ['Arrivée', 'to_label', 'Destination']].map(([label, key, ph]) => (
+                  {[['Départ', 'from_label', 'from_address_id', 'Janzé - Dépôt RGO'], ['Arrivée', 'to_label', 'to_address_id', 'Destination']].map(([label, key, idKey, ph]) => (
                     <div key={key}>
                       <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>{label}</label>
-                      <input value={form[key]} onChange={s(key)} placeholder={ph}
+                      {/* Sélecteur depuis le carnet d'adresses */}
+                      <select value={form[idKey] || ''} onChange={e => {
+                          const addrId = e.target.value
+                          const addr = (addresses || []).find(a => a.id === addrId)
+                          setForm(f => ({ ...f, [idKey]: addrId || null, [key]: addr ? (addr.name || addr.address || '') : f[key] }))
+                        }}
+                        style={{ width: '100%', padding: '6px 9px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit', marginBottom: '4px', boxSizing: 'border-box' }}>
+                        <option value="">📖 Choisir dans le carnet…</option>
+                        {(addresses || []).map(a => (
+                          <option key={a.id} value={a.id}>{a.name || a.address}{a.lat && a.lng ? ' 📍' : ' (sans GPS)'}</option>
+                        ))}
+                      </select>
+                      {/* Texte libre (modifiable, conservé pour l'affichage) */}
+                      <input value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={ph}
                         style={{ width: '100%', padding: '6px 9px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                       {form[key] && (
                         <a href={`https://maps.google.com/?q=${encodeURIComponent(form[key])}`} target="_blank" rel="noreferrer"
