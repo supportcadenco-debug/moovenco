@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { calculAmplitude, formatDuration, RSE_LIMITS } from '@/lib/rse'
 
 const SLOT_TYPES = [
   { value: 'scolaire',    label: 'Scolaire',     color: '#1A2130' },
@@ -106,6 +107,7 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
   const [formTab, setFormTab] = useState('manuel')
   const [orderSearch, setOrderSearch] = useState('')
   const [circuitSearch, setCircuitSearch] = useState('')
+  const [showHourTable, setShowHourTable] = useState(true)
 
   const totalW = HOUR_W * 24
 
@@ -160,6 +162,11 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
   const lastSlot = sortedSlots[sortedSlots.length - 1]
   const totalDur = firstSlot && lastSlot ? duration(firstSlot.start_time, lastSlot.end_time) : null
 
+  // Amplitude RSE
+  const amplitudeMin = sortedSlots.length > 0 ? calculAmplitude(sortedSlots) : 0
+  const ampliDanger = amplitudeMin > RSE_LIMITS.AMPLITUDE_MAX_NORMAL
+  const ampliWarn = !ampliDanger && amplitudeMin > RSE_LIMITS.AMPLITUDE_MAX_NORMAL - 60
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ background: 'white', borderRadius: '12px', width: '95vw', maxWidth: '1100px', height: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
@@ -170,7 +177,19 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
             {driver?.initials}
           </div>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: '700', color: '#1A2130' }}>{driver?.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: '700', color: '#1A2130' }}>{driver?.name}</span>
+              {amplitudeMin > 0 && (
+                <span style={{
+                  fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  background: ampliDanger ? '#FFEBEE' : ampliWarn ? '#FFF3E0' : '#E8F5E9',
+                  color: ampliDanger ? '#C62828' : ampliWarn ? '#D4720A' : '#1A9E50',
+                }}>
+                  {ampliDanger && '⚠️ '}Amplitude {formatDuration(amplitudeMin)}
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: '11px', color: '#8A95A3' }}>{dateStr}{totalDur && ` — Journée : ${firstSlot.start_time} → ${lastSlot.end_time} (${totalDur})`}</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -270,9 +289,13 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
             {/* LISTE CRÉNEAUX DÉROULANTS */}
             {sortedSlots.length > 0 && (
               <div style={{ marginTop: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>
-                    Créneaux de la journée ({sortedSlots.length})
+                <div onClick={() => setShowHourTable(o => !o)}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', color: '#8A95A3', transform: showHourTable ? 'rotate(90deg)' : 'none', transition: 'transform .15s', display: 'inline-block' }}>▶</span>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130' }}>
+                      Créneaux de la journée ({sortedSlots.length})
+                    </span>
                   </div>
                   {totalDur && (
                     <div style={{ fontSize: '10px', color: '#8A95A3' }}>
@@ -280,7 +303,7 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
                     </div>
                   )}
                 </div>
-                {sortedSlots.map(slot => (
+                {showHourTable && sortedSlots.map(slot => (
                   <SlotRow key={slot.id} slot={slot} onDelete={onDeleteSlot} />
                 ))}
               </div>
