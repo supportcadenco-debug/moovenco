@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { calculAmplitude, formatDuration, RSE_LIMITS } from '@/lib/rse'
+import { calculAmplitude, formatDuration, RSE_LIMITS, checkJourneeRse, severityColor } from '@/lib/rse'
 
 const SLOT_TYPES = [
   { value: 'scolaire',    label: 'Scolaire',     color: '#1A2130' },
@@ -167,6 +167,9 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
   const ampliDanger = amplitudeMin > RSE_LIMITS.AMPLITUDE_MAX_NORMAL
   const ampliWarn = !ampliDanger && amplitudeMin > RSE_LIMITS.AMPLITUDE_MAX_NORMAL - 60
 
+  // Vérification RSE complète (amplitude, conduite, pauses...)
+  const rseCheck = sortedSlots.length > 0 ? checkJourneeRse(sortedSlots) : null
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ background: 'white', borderRadius: '12px', width: '95vw', maxWidth: '1100px', height: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
@@ -286,7 +289,32 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
               </div>
             </div>
 
-            {/* LISTE CRÉNEAUX DÉROULANTS */}
+            {/* PANNEAU CONFORMITÉ RSE */}
+            {rseCheck && (
+              <div style={{ marginTop: '16px', border: `1px solid ${rseCheck.severity === 'danger' ? '#FFCDD2' : rseCheck.severity === 'warning' ? '#FFE0B2' : '#A5D6A7'}`, borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ padding: '8px 12px', background: rseCheck.severity === 'danger' ? '#FFEBEE' : rseCheck.severity === 'warning' ? '#FFF3E0' : '#E8F5E9', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '13px' }}>{rseCheck.severity === 'danger' ? '⛔' : rseCheck.severity === 'warning' ? '⚠️' : '✅'}</span>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: rseCheck.severity === 'danger' ? '#C62828' : rseCheck.severity === 'warning' ? '#D4720A' : '#1A9E50' }}>
+                    {rseCheck.severity === 'danger' ? 'Non conforme RSE' : rseCheck.severity === 'warning' ? 'À surveiller' : 'Conforme RSE'}
+                  </span>
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', fontSize: '10px', color: '#4A5568' }}>
+                    <span>Amplitude <strong>{formatDuration(rseCheck.amplitude)}</strong></span>
+                    <span>Conduite <strong>{formatDuration(rseCheck.tempsConduite)}</strong></span>
+                    <span>Service <strong>{formatDuration(rseCheck.tempsService)}</strong></span>
+                  </div>
+                </div>
+                {rseCheck.alerts.length > 0 && (
+                  <div style={{ padding: '8px 12px', background: 'white', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {rseCheck.alerts.map((a, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: a.severity === 'danger' ? '#C62828' : '#D4720A' }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: a.severity === 'danger' ? '#C62828' : '#D4720A', flexShrink: 0 }} />
+                        {a.message}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {sortedSlots.length > 0 && (
               <div style={{ marginTop: '16px' }}>
                 <div onClick={() => setShowHourTable(o => !o)}
