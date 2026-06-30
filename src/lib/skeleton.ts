@@ -188,23 +188,34 @@ export async function buildSkeleton(
         const hlpDur = hlpEntreServices[i]
         const trou = debutSuivant - finCourant
 
-        if (trou >= hlpDur) {
-          // Assez de temps : HLP + éventuel temps mort (mise à dispo / attente)
+        if (trou >= hlpDur + mep) {
+          // Assez de temps pour : HLP juste après la fin du service,
+          // puis MEP court juste avant le service suivant,
+          // et un CRÉNEAU VIDE au milieu (temps de disponibilité / coupure).
           result.push(slot({
             label: 'HLP', type: 'neutre', color: COLORS.neutre,
             start_time: svc.end_time, end_time: minutesToTime(finCourant + hlpDur),
             from_label: svc.to_address.name || '', to_label: suivant.from_address.name || '',
             vehicle: suivant.vehicle || svc.vehicle || '',
           }))
-          // S'il reste du temps avant le service suivant -> MEP / mise à disposition
-          if (trou > hlpDur) {
-            result.push(slot({
-              label: 'MEP', type: 'neutre', color: COLORS.neutre,
-              start_time: minutesToTime(finCourant + hlpDur), end_time: suivant.start_time,
-              from_label: suivant.from_address.name || '', to_label: suivant.from_address.name || '',
-              compressible: true,
-            }))
-          }
+          // MEP court juste avant le service suivant
+          result.push(slot({
+            label: 'MEP', type: 'neutre', color: COLORS.neutre,
+            start_time: minutesToTime(debutSuivant - mep), end_time: suivant.start_time,
+            from_label: suivant.from_address.name || '', to_label: suivant.from_address.name || '',
+            compressible: true,
+          }))
+          // Le trou entre fin HLP et début MEP reste VIDE (non inséré).
+        } else if (trou >= hlpDur) {
+          // Juste assez pour le HLP (le MEP ne tient pas en entier) :
+          // HLP qui occupe tout le trou jusqu'au service suivant.
+          result.push(slot({
+            label: 'HLP', type: 'neutre', color: COLORS.neutre,
+            start_time: svc.end_time, end_time: minutesToTime(finCourant + hlpDur),
+            from_label: svc.to_address.name || '', to_label: suivant.from_address.name || '',
+            vehicle: suivant.vehicle || svc.vehicle || '',
+          }))
+          // Reste un petit trou vide (< mep) -> laissé libre.
         } else {
           // Pas assez de temps entre les deux services : HLP quand même,
           // signalé comme tendu (l'UI affichera l'incohérence)
