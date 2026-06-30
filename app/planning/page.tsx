@@ -6,6 +6,49 @@ import { supabase } from '../../src/lib/supabase'
 import DayGantt from './DayGantt'
 import Navbar from '../../src/components/Navbar'
 import { genererSquelettePourCircuit, recalculerJournee } from '@/lib/planningEngine'
+import { calculAmplitude, formatDuration, RSE_LIMITS, checkJourneeRse } from '@/lib/rse'
+
+// Détermine le code de journée à afficher dans la vue générale
+// selon les créneaux présents (hors tampons PDS/HLP/MEP/FDS).
+function getDayCode(daySlots) {
+  const TAMPONS = ['PDS', 'HLP', 'MEP', 'FDS', 'MAD']
+  const services = (daySlots || []).filter(s => !TAMPONS.includes(s.label))
+
+  // Repos / Vacances : si présence d'un créneau repos
+  const repos = services.find(s => s.type === 'repos')
+  if (repos) {
+    return { code: repos.label || 'REPOS', color: repos.color || '#1565C0', type: 'repos' }
+  }
+
+  if (services.length === 0) return null
+
+  const scolaires = services.filter(s => s.type === 'scolaire')
+  const occasionnels = services.filter(s => s.type === 'occasionnel' || s.type === 'mixte' || s.type === 'regulier')
+
+  // Scolaire + occasionnel => MIXTE
+  if (scolaires.length > 0 && occasionnels.length > 0) {
+    return { code: 'MIXTE', color: '#C0157A', type: 'mixte' }
+  }
+
+  // Que de l'occasionnel => OCC
+  if (scolaires.length === 0 && occasionnels.length > 0) {
+    return { code: 'OCC', color: '#D4720A', type: 'occasionnel' }
+  }
+
+  // Scolaire(s)
+  if (scolaires.length > 0) {
+    // Codes scolaires distincts
+    const codesUniques = [...new Set(scolaires.map(s => s.label))]
+    if (codesUniques.length === 1) {
+      // Un seul circuit scolaire => son code
+      return { code: codesUniques[0], color: '#1A2130', type: 'scolaire' }
+    }
+    // Plusieurs scolaires différents => REG
+    return { code: 'REG', color: '#1A9E50', type: 'regulier' }
+  }
+
+  return null
+}
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
@@ -735,32 +778,42 @@ export default function Planning() {
                       const planKey = `${drv.id}_${dateKey(d)}`
                       const plan = plannings[planKey]
                       const daySlots = plan ? (slots[plan.id] || []) : []
+                      const dayCode = getDayCode(daySlots)
+                      const amplitude = daySlots.length > 0 ? calculAmplitude(daySlots) : 0
+                      const ampliDanger = amplitude > RSE_LIMITS.AMPLITUDE_MAX_NORMAL
+                      const ampliWarn = !ampliDanger && amplitude > RSE_LIMITS.AMPLITUDE_MAX_NORMAL - 60
                       return (
                         <td key={dayIdx}
-                          style={{ background: isToday(d) ? '#F0F7FF' : di % 2 === 0 ? 'white' : '#FAFBFC', padding: '4px', borderRight: '1px solid #D0D4DA', verticalAlign: 'top' }}>
-                          <div style={{ minHeight: '62px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            {daySlots.sort((a, b) => a.start_time?.localeCompare(b.start_time)).map(slot => (
-                              <div key={slot.id}
-                                onClick={() => setPanel({ type: 'slot', data: slot, driverId: drv.id, date: d })}
-                                style={{ background: slot.color || '#9AA3B2', color: 'white', borderRadius: '3px', padding: '2px 5px', fontSize: '9px', fontWeight: '700', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                                onMouseEnter={e => e.currentTarget.style.filter = 'brightness(.85)'}
-                                onMouseLeave={e => e.currentTarget.style.filter = 'none'}>
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.label}</span>
-                                {slot.start_time && <span style={{ opacity: .8, fontSize: '8px', flexShrink: 0, marginLeft: '3px' }}>{slot.start_time}</span>}
-                              </div>
-                            ))}
-                            <div
-                              onClick={() => {
-                                const planKey = `${drv.id}_${dateKey(d)}`
-                                const plan = plannings[planKey]
-                                const daySlots = plan ? (slots[plan.id] || []) : []
-                                setGantt({ driver: drv, date: d, slots: daySlots, planId: plan?.id })
-                              }}
-                              style={{ flex: 1, minHeight: daySlots.length === 0 ? '56px' : '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D0D4DA', fontSize: '10px', border: '1px dashed #D0D4DA', borderRadius: '4px', cursor: 'pointer' }}
-                              onMouseEnter={e => { e.currentTarget.style.borderColor = '#0E5AA7'; e.currentTarget.style.color = '#0E5AA7'; e.currentTarget.style.background = '#E8F0FB' }}
-                              onMouseLeave={e => { e.currentTarget.style.borderColor = '#D0D4DA'; e.currentTarget.style.color = '#D0D4DA'; e.currentTarget.style.background = 'transparent' }}>
-                              +
-                            </div>
+                          onClick={() => {
+                            setGantt({ driver: drv, date: d, slots: daySlots, planId: plan?.id })
+                          }}
+                          style={{ background: isToday(d) ? '#F0F7FF' : di % 2 === 0 ? 'white' : '#FAFBFC', padding: '5px', borderRight: '1px solid #D0D4DA', verticalAlign: 'middle', cursor: 'pointer' }}
+                          onMouseEnter={e => { if (!dayCode) e.currentTarget.style.background = '#E8F0FB' }}
+                          onMouseLeave={e => { if (!dayCode) e.currentTarget.style.background = isToday(d) ? '#F0F7FF' : di % 2 === 0 ? 'white' : '#FAFBFC' }}>
+                          <div style={{ minHeight: '54px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                            {dayCode ? (
+                              <>
+                                <div style={{
+                                  background: (dayCode.color || '#9AA3B2') + '22',
+                                  color: dayCode.color || '#1A2130',
+                                  borderRadius: '6px', padding: '8px 10px', fontSize: '12px', fontWeight: '700',
+                                  width: '100%', textAlign: 'center', letterSpacing: '.3px',
+                                }}>
+                                  {dayCode.code}
+                                </div>
+                                {amplitude > 0 && dayCode.type !== 'repos' && (
+                                  <div style={{
+                                    fontSize: '9px', fontWeight: ampliDanger ? '700' : '500',
+                                    color: ampliDanger ? '#C62828' : ampliWarn ? '#D4720A' : '#8A95A3',
+                                    display: 'flex', alignItems: 'center', gap: '2px',
+                                  }}>
+                                    {ampliDanger && '⚠️ '}{formatDuration(amplitude)}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div style={{ color: '#CDD3DA', fontSize: '16px' }}>+</div>
+                            )}
                           </div>
                         </td>
                       )
