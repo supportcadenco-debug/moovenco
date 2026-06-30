@@ -120,7 +120,7 @@ function DriverColumn({ driver, daySlots, allDrivers, onChangeDriver, onRemove, 
   )
 }
 
-export default function CrossDetailView({ date, drivers, plannings, slots, dateKey, onClose, onPrevDay, onNextDay, initialDrivers }) {
+export default function CrossDetailView({ date, drivers, plannings, slots, dateKey, onClose, onPrevDay, onNextDay, initialDrivers = null }) {
   // Les conducteurs affichés (2 par défaut)
   const [shownDriverIds, setShownDriverIds] = useState(
     initialDrivers && initialDrivers.length > 0
