@@ -270,36 +270,25 @@ export default function Planning() {
         await supabase.from('planning').update({ valide: true, valide_at: new Date().toISOString() }).eq('id', planning.id)
       }
 
-      // Générer squelette pour chaque circuit
+      // Charger les créneaux déjà présents ce jour (anti-doublon manuel + auto)
+      const { data: existingSlots } = await supabase.from('slots')
+        .select('circuit_id, label').eq('planning_id', planning.id)
+
+      // Générer le squelette pour chaque circuit habituel via le moteur
+      // (OSRM + RSE + anti-doublon intégré : un circuit déjà présent
+      //  — manuel ou auto — n'est pas redupliqué).
       for (const dc of myCircuits) {
         const circuit = dc.circuits
         if (!circuit) continue
 
-        // Vérifier si déjà généré
-        const { data: existing } = await supabase.from('slots').select('id').eq('planning_id', planning.id).eq('label', circuit.name)
-        if (existing && existing.length > 0) continue
-
-        const debut  = circuit.heure_debut || '07:00'
-        const fin    = circuit.heure_fin   || '08:30'
-        const debMin = parseInt(debut.split(':')[0])*60 + parseInt(debut.split(':')[1])
-        const finMin  = parseInt(fin.split(':')[0])*60   + parseInt(fin.split(':')[1])
-
-        const skeleton = [
-          { label: 'PDS',          type: 'neutre',   color: '#9AA3B2', start_time: toTime(debMin-20), end_time: toTime(debMin-10), from_label: 'Garage Janzé', to_label: 'Garage Janzé' },
-          { label: 'HLP',          type: 'neutre',   color: '#9AA3B2', start_time: toTime(debMin-10), end_time: debut,             from_label: 'Garage Janzé', to_label: circuit.name },
-          { label: circuit.code || circuit.name, type: 'scolaire', color: '#1A2130', start_time: debut, end_time: fin, from_label: circuit.name, to_label: circuit.name, vehicle: circuit.vehicule_defaut || '', circuit_id: circuit.id },
-          { label: 'FDS',          type: 'neutre',   color: '#9AA3B2', start_time: fin,               end_time: toTime(finMin+10), from_label: circuit.name, to_label: 'Garage Janzé' },
-        ]
-
-        for (const slot of skeleton) {
-          await supabase.from('slots').insert({
-            id: generateId(), company_id: COMPANY_ID, planning_id: planning.id,
-            label: slot.label, type: slot.type, color: slot.color,
-            start_time: slot.start_time, end_time: slot.end_time,
-            from_label: slot.from_label, to_label: slot.to_label,
-            vehicle: driver.vehicle_habituel || '', notes: '',
-          })
-          created++
+        const result = await genererSquelettePourCircuit(
+          planning.id, driver.id, circuit.id, existingSlots || []
+        )
+        if (result.ok && result.inserted > 0) {
+          created += result.inserted
+          // Ajouter le circuit fraîchement créé à la liste pour bloquer
+          // un éventuel doublon dans la même boucle.
+          existingSlots?.push({ circuit_id: circuit.id, label: circuit.code || circuit.name })
         }
       }
     }
@@ -377,39 +366,28 @@ export default function Planning() {
 
     if (!planning) { setSendingPlanning(false); return }
 
+    // Charger les créneaux déjà présents (anti-doublon manuel + auto)
+    const { data: existingDay } = await supabase.from('slots')
+      .select('circuit_id, label').eq('planning_id', planning.id)
+
     let created = 0
     for (const dc of myCircuits) {
       const circuit = dc.circuits
       if (!circuit) continue
-      const { data: existing } = await supabase.from('slots').select('id').eq('planning_id', planning.id).eq('label', circuit.code || circuit.name)
-      if (existing && existing.length > 0) continue
-      const debut  = circuit.heure_debut || '07:00'
-      const fin    = circuit.heure_fin   || '08:30'
-      const debMin = parseInt(debut.split(':')[0])*60 + parseInt(debut.split(':')[1])
-      const finMin  = parseInt(fin.split(':')[0])*60   + parseInt(fin.split(':')[1])
-      const skeleton = [
-        { label: 'PDS', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-20), end_time: toTime(debMin-10), from_label: 'Garage Janzé', to_label: 'Garage Janzé' },
-        { label: 'HLP', type: 'neutre', color: '#9AA3B2', start_time: toTime(debMin-10), end_time: debut, from_label: 'Garage Janzé', to_label: circuit.name },
-        { label: circuit.code || circuit.name, type: 'scolaire', color: '#1A2130', start_time: debut, end_time: fin, from_label: circuit.name, to_label: circuit.name, circuit_id: circuit.id },
-        { label: 'FDS', type: 'neutre', color: '#9AA3B2', start_time: fin, end_time: toTime(finMin+10), from_label: circuit.name, to_label: 'Garage Janzé' },
-      ]
-      for (const slot of skeleton) {
-        await supabase.from('slots').insert({
-          id: generateId(), company_id: COMPANY_ID, planning_id: planning.id,
-          label: slot.label, type: slot.type, color: slot.color,
-          start_time: slot.start_time, end_time: slot.end_time,
-          from_label: slot.from_label, to_label: slot.to_label,
-          vehicle: '', notes: '',
-          circuit_id: (slot as any).circuit_id || null,
-        })
-        created++
+
+      const result = await genererSquelettePourCircuit(
+        planning.id, driverId, circuit.id, existingDay || []
+      )
+      if (result.ok && result.inserted > 0) {
+        created += result.inserted
+        existingDay?.push({ circuit_id: circuit.id, label: circuit.code || circuit.name })
       }
     }
 
     await loadSlots()
     setSendingPlanning(false)
     setPanel(null)
-    alert(`✅ Planning du ${date.toLocaleDateString('fr-FR')} envoyé !\n${Math.floor(created/4)} circuit(s) générés`)
+    alert(`✅ Planning du ${date.toLocaleDateString('fr-FR')} envoyé !`)
   }
 
   async function loadSlots() {
