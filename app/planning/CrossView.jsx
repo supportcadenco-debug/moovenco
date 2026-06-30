@@ -59,7 +59,7 @@ function MiniStrip({ daySlots }) {
 const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 const MONTHS = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc']
 
-export default function CrossView({ drivers, dates, plannings, slots, dateKey, isToday, onCellClick, nbDays, setNbDays, totalAlerts }) {
+export default function CrossView({ drivers, dates, plannings, slots, dateKey, isToday, onCellClick, nbDays, setNbDays, totalAlerts, onDayHeaderClick }) {
   // On limite l'affichage au nombre de jours choisi
   const shownDates = dates.slice(0, nbDays)
 
@@ -92,9 +92,14 @@ export default function CrossView({ drivers, dates, plannings, slots, dateKey, i
               Conducteur
             </th>
             {shownDates.map((d, i) => (
-              <th key={i} style={{ background: isToday(d) ? '#0E3A6E' : '#253044', color: 'white', fontSize: '11px', fontWeight: '600', textAlign: 'center', padding: '8px 6px', position: 'sticky', top: 0, zIndex: 20, borderRight: '1px solid rgba(255,255,255,.06)', minWidth: '130px' }}>
+              <th key={i} onClick={() => onDayHeaderClick && onDayHeaderClick(d)}
+                title="Cliquer pour comparer les conducteurs ce jour"
+                style={{ background: isToday(d) ? '#0E3A6E' : '#253044', color: 'white', fontSize: '11px', fontWeight: '600', textAlign: 'center', padding: '8px 6px', position: 'sticky', top: 0, zIndex: 20, borderRight: '1px solid rgba(255,255,255,.06)', minWidth: '130px', cursor: 'pointer' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#0E5AA7'}
+                onMouseLeave={e => e.currentTarget.style.background = isToday(d) ? '#0E3A6E' : '#253044'}>
                 <div style={{ fontSize: '9px', color: 'rgba(255,255,255,.5)', textTransform: 'uppercase' }}>{DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
                 <div style={{ fontSize: '15px', fontWeight: '700' }}>{d.getDate()} <span style={{ fontSize: '9px', fontWeight: '400', color: 'rgba(255,255,255,.5)' }}>{MONTHS[d.getMonth()]}</span></div>
+                <div style={{ fontSize: '8px', color: 'rgba(255,255,255,.4)', marginTop: '2px' }}>⊞ comparer</div>
               </th>
             ))}
           </tr>

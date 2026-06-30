@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/useAuth'
 import { supabase } from '../../src/lib/supabase'
 import DayGantt from './DayGantt'
 import CrossView from './CrossView'
+import CrossDetailView from './CrossDetailView'
 import Navbar from '../../src/components/Navbar'
 import { genererSquelettePourCircuit, recalculerJournee } from '@/lib/planningEngine'
 import { calculAmplitude, formatDuration, RSE_LIMITS, checkJourneeRse } from '@/lib/rse'
@@ -104,6 +105,7 @@ export default function Planning() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [viewMode, setViewMode] = useState('normal') // 'normal' | 'cross'
   const [nbDays, setNbDays] = useState(3)
+  const [crossDetail, setCrossDetail] = useState(null) // { date } quand vue détail croisée ouverte
   const [drivers, setDrivers] = useState([])
   const [plannings, setPlannings] = useState({})
   const [slots, setSlots] = useState({})
@@ -769,6 +771,7 @@ export default function Planning() {
               isToday={isToday}
               nbDays={nbDays}
               setNbDays={setNbDays}
+              onDayHeaderClick={(d) => setCrossDetail({ date: d })}
               totalAlerts={(() => {
                 let count = 0
                 drivers.forEach(drv => {
@@ -1195,6 +1198,24 @@ export default function Planning() {
             setGantt(g => ({ ...g, slots: newSlots || [] }))
             setSendingPlanning(false)
           }}
+        />
+      )}
+
+      {/* VUE DÉTAIL CROISÉE */}
+      {crossDetail && (
+        <CrossDetailView
+          date={crossDetail.date}
+          drivers={drivers}
+          plannings={plannings}
+          slots={slots}
+          dateKey={dateKey}
+          onClose={() => { setCrossDetail(null); loadSlots() }}
+          onPrevDay={() => setCrossDetail(cd => {
+            const d = new Date(cd.date); d.setDate(d.getDate() - 1); return { date: d }
+          })}
+          onNextDay={() => setCrossDetail(cd => {
+            const d = new Date(cd.date); d.setDate(d.getDate() + 1); return { date: d }
+          })}
         />
       )}
     </div>
