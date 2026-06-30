@@ -98,9 +98,9 @@ export interface SlotLike {
  * totalité des journées de transport scolaire/occasionnel tiennent dans une
  * même journée civile ; les très rares services de nuit se gèrent à part.
  */
-export function calculAmplitude(slots: SlotLike[]): number {
+export function calculAmplitude(slots: (SlotLike & { label?: string })[]): number {
   const actifs = slots.filter(s =>
-    s.type !== 'repos' && s.start_time && s.end_time
+    !estReposOuVacances(s) && s.start_time && s.end_time && dureeSaine(s) > 0
   )
   if (actifs.length === 0) return 0
 
@@ -111,9 +111,6 @@ export function calculAmplitude(slots: SlotLike[]): number {
   const derniereFin = Math.max(...fins)
 
   let amplitude = derniereFin - premierDebut
-
-  // Sécurité : jamais négatif, jamais > 24h (un créneau aberrant ne doit pas
-  // produire une amplitude impossible).
   if (amplitude < 0) amplitude = 0
   if (amplitude > 24 * 60) amplitude = 24 * 60
 
@@ -127,26 +124,35 @@ export function calculAmplitude(slots: SlotLike[]): number {
  */
 const TYPES_CONDUITE = ['scolaire', 'occasionnel', 'regulier', 'mixte']
 
-export function calculTempsConduite(slots: SlotLike[]): number {
-  return slots
-    .filter(s => TYPES_CONDUITE.includes(s.type || '') || s.label === 'HLP')
-    .reduce((total, s) => {
-      const start = timeToMinutes(s.start_time)
-      let end = timeToMinutes(s.end_time)
-      if (end < start) end += 1440
-      return total + (end - start)
-    }, 0)
+// Un créneau est "de repos" si son type est repos OU si son label évoque
+// des vacances / indispo (VACS, VACS DISPO, REPOS...). Ces créneaux couvrent
+// souvent 00:00→23:59 et ne doivent jamais compter comme du travail.
+function estReposOuVacances(s: SlotLike & { label?: string }): boolean {
+  if (s.type === 'repos') return true
+  const l = (s.label || '').trim().toUpperCase()
+  return l.startsWith('VACS') || l.startsWith('REPOS') || l.startsWith('CONGE') || l.startsWith('CONGÉ')
 }
 
-/** Temps de service = amplitude moins les vraies coupures (repos pris dans la journée) */
-export function calculTempsService(slots: SlotLike[]): number {
-  const actifs = slots.filter(s => s.type !== 'repos' && s.start_time && s.end_time)
-  return actifs.reduce((total, s) => {
-    const start = timeToMinutes(s.start_time)
-    let end = timeToMinutes(s.end_time)
-    if (end < start) end += 1440
-    return total + (end - start)
-  }, 0)
+// Durée d'un créneau en minutes, en ignorant les créneaux mal formés
+// (fin <= début => 0, pour ne pas fausser les totaux avec un +1440 hasardeux).
+function dureeSaine(s: SlotLike): number {
+  const start = timeToMinutes(s.start_time)
+  const end = timeToMinutes(s.end_time)
+  const d = end - start
+  return d > 0 && d <= 24 * 60 ? d : 0
+}
+
+export function calculTempsConduite(slots: (SlotLike & { label?: string })[]): number {
+  return slots
+    .filter(s => !estReposOuVacances(s) && (TYPES_CONDUITE.includes(s.type || '') || (s.label || '').toUpperCase().startsWith('HLP')))
+    .reduce((total, s) => total + dureeSaine(s), 0)
+}
+
+/** Temps de service = somme des durées des créneaux actifs (hors repos/vacances) */
+export function calculTempsService(slots: (SlotLike & { label?: string })[]): number {
+  return slots
+    .filter(s => !estReposOuVacances(s) && s.start_time && s.end_time)
+    .reduce((total, s) => total + dureeSaine(s), 0)
 }
 
 // ─── Vérification de conformité ──────────────────────────────────────────────
@@ -225,10 +231,10 @@ export function checkJourneeRse(slots: SlotLike[], options?: { repreceptionNorma
 }
 
 /** Détecte un trou (créneau libre) d'au moins `seuil` minutes dans la journée */
-function hasAdequatePause(slots: SlotLike[], tempsService: number): boolean {
+function hasAdequatePause(slots: (SlotLike & { label?: string })[], tempsService: number): boolean {
   const seuilPause = tempsService > 9 * 60 ? RSE_LIMITS.PAUSE_CDT_APRES_9H : RSE_LIMITS.PAUSE_CDT_APRES_6H
   const actifs = [...slots]
-    .filter(s => s.type !== 'repos' && s.start_time && s.end_time)
+    .filter(s => !estReposOuVacances(s) && s.start_time && s.end_time && dureeSaine(s) > 0)
     .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time))
 
   for (let i = 0; i < actifs.length - 1; i++) {
