@@ -90,20 +90,34 @@ export interface SlotLike {
 }
 
 /**
- * Amplitude = intervalle entre le premier et le dernier événement de la journée
- * (prise de service -> fin de service), tous types de créneaux confondus
- * sauf 'repos'.
+ * Amplitude = intervalle entre le tout premier début et la toute dernière fin
+ * de la journée (hors créneaux 'repos'). Calcul sur la journée civile.
+ *
+ * Robuste : ignore les créneaux mal formés (fin <= début, donc passage minuit
+ * supposé ou erreur de saisie) pour le bornage, et plafonne à 24h. La quasi
+ * totalité des journées de transport scolaire/occasionnel tiennent dans une
+ * même journée civile ; les très rares services de nuit se gèrent à part.
  */
 export function calculAmplitude(slots: SlotLike[]): number {
-  const actifs = slots.filter(s => s.type !== 'repos' && s.start_time && s.end_time)
+  const actifs = slots.filter(s =>
+    s.type !== 'repos' && s.start_time && s.end_time
+  )
   if (actifs.length === 0) return 0
-  const starts = actifs.map(s => timeToMinutes(s.start_time))
-  const ends = actifs.map(s => {
-    const e = timeToMinutes(s.end_time)
-    // Gère le passage minuit (ex: 23:00 -> 00:30)
-    return e < timeToMinutes(s.start_time) ? e + 1440 : e
-  })
-  return Math.max(...ends) - Math.min(...starts)
+
+  const debuts = actifs.map(s => timeToMinutes(s.start_time))
+  const fins = actifs.map(s => timeToMinutes(s.end_time))
+
+  const premierDebut = Math.min(...debuts)
+  const derniereFin = Math.max(...fins)
+
+  let amplitude = derniereFin - premierDebut
+
+  // Sécurité : jamais négatif, jamais > 24h (un créneau aberrant ne doit pas
+  // produire une amplitude impossible).
+  if (amplitude < 0) amplitude = 0
+  if (amplitude > 24 * 60) amplitude = 24 * 60
+
+  return amplitude
 }
 
 /**
