@@ -126,6 +126,7 @@ export default function Personnel() {
   const [allAbsences, setAllAbsences]    = useState<any[]>([])
   const [savingAbsence, setSavingAbsence]= useState(false)
   const [absenceFilter, setAbsenceFilter]= useState<'all' | 'pending'>('pending')
+  const [addresses, setAddresses]        = useState<any[]>([])
 
   useEffect(() => { loadAll() }, [])
 
@@ -141,6 +142,8 @@ export default function Personnel() {
     setLoading(false)
     const { data: circs } = await supabase.from('circuits').select('id, name, code, heure_debut, heure_fin').eq('company_id', COMPANY_ID).order('code')
     setCircuits(circs || [])
+    const { data: addrs } = await supabase.from('addresses').select('id, name, address, lat, lng').eq('company_id', COMPANY_ID).order('name')
+    setAddresses(addrs || [])
     loadAllAbsences()
   }
 
@@ -285,6 +288,7 @@ export default function Personnel() {
       visite_expiry: driverForm.visite_medicale || null,
       carte_conducteur_expiry: driverForm.carte_conducteur || null,
       vehicle_habituel: driverForm.vehicle_habituel || null,
+      point_attache_id: driverForm.point_attache_id || null,
       dispo_vacances: driverForm.dispo_vacances || false,
       notes: driverForm.notes || null,
     }
@@ -317,6 +321,7 @@ export default function Personnel() {
       visite_medicale: dd?.visite_expiry || '',
       carte_conducteur:dd?.carte_conducteur_expiry || '',
       vehicle_habituel:dd?.vehicle_habituel || '',
+      point_attache_id:dd?.point_attache_id || '',
       dispo_vacances:  dd?.dispo_vacances || false,
       notes:           dd?.notes || '',
     })
@@ -705,6 +710,16 @@ export default function Personnel() {
                               <input value={driverForm.vehicle_habituel} onChange={e => setDriverForm((f: any) => ({ ...f, vehicle_habituel: e.target.value }))} placeholder="GZ-795-QG" style={{ ...inputSt }} />
                             </div>
                             <div>
+                              <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'3px' }}>📍 Point d'attache (départ/retour journée)</label>
+                              <select value={driverForm.point_attache_id || ''} onChange={e => setDriverForm((f: any) => ({ ...f, point_attache_id: e.target.value }))} style={{ ...inputSt }}>
+                                <option value="">— Dépôt par défaut (Janzé) —</option>
+                                {addresses.map(a => (
+                                  <option key={a.id} value={a.id}>{a.name || a.address}{a.lat && a.lng ? ' 📍' : ' (sans GPS)'}</option>
+                                ))}
+                              </select>
+                              <div style={{ fontSize:'9px', color:'#8A95A3', marginTop:'3px' }}>Sert au calcul des HLP et de l'amplitude de chaque journée.</div>
+                            </div>
+                            <div>
                               <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'3px' }}>Notes</label>
                               <textarea value={driverForm.notes} rows={2} onChange={e => setDriverForm((f: any) => ({ ...f, notes: e.target.value }))} style={{ ...inputSt, resize:'vertical' }} />
                             </div>
@@ -728,6 +743,10 @@ export default function Personnel() {
                             <ExpiryTag date={dd.visite_expiry}           label="Visite médicale" />
                             <ExpiryTag date={dd.carte_conducteur_expiry} label="Carte conducteur" />
                             {dd.vehicle_habituel && <div style={{ fontSize:'11px', color:'#4A5568', marginTop:'4px' }}>🚌 <strong>Véhicule habituel :</strong> {dd.vehicle_habituel}</div>}
+                            {dd.point_attache_id && (() => {
+                              const pa = addresses.find(a => a.id === dd.point_attache_id)
+                              return pa ? <div style={{ fontSize:'11px', color:'#4A5568', marginTop:'4px' }}>📍 <strong>Point d'attache :</strong> {pa.name || pa.address}</div> : null
+                            })()}
                             <div style={{ fontSize:'11px', color: dd.dispo_vacances?'#1A9E50':'#8A95A3', marginTop:'4px' }}>
                               {dd.dispo_vacances ? '✅ Disponible vacances' : '❌ Indisponible vacances'}
                             </div>
