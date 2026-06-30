@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/useAuth'
 import { supabase } from '../../src/lib/supabase'
 import DayGantt from './DayGantt'
 import Navbar from '../../src/components/Navbar'
-import { genererSquelettePourCircuit } from '@/lib/planningEngine'
+import { genererSquelettePourCircuit, recalculerJournee } from '@/lib/planningEngine'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
@@ -1007,13 +1007,24 @@ export default function Planning() {
             await loadSlots()
             const plan = plannings[planKey]
             if (plan) {
-              const { data: newSlots } = await supabase.from('slots').select('*').eq('planning_id', plan.id)
+              // Recalcul auto du squelette (PDS/HLP/MEP/FDS) autour des services
+              await recalculerJournee(plan.id, gantt.driver.id)
+              const { data: newSlots } = await supabase.from('slots').select('*').eq('planning_id', plan.id).order('start_time')
               setGantt(g => ({ ...g, slots: newSlots || [] }))
             }
           }}
           onDeleteSlot={async (slotId) => {
             await supabase.from('slots').delete().eq('id', slotId)
-            setGantt(g => ({ ...g, slots: g.slots.filter(s => s.id !== slotId) }))
+            const planKey = `${gantt.driver.id}_${dateKey(gantt.date)}`
+            const plan = plannings[planKey]
+            if (plan) {
+              // Recalcul auto : les tampons se replacent autour des services restants
+              await recalculerJournee(plan.id, gantt.driver.id)
+              const { data: newSlots } = await supabase.from('slots').select('*').eq('planning_id', plan.id).order('start_time')
+              setGantt(g => ({ ...g, slots: newSlots || [] }))
+            } else {
+              setGantt(g => ({ ...g, slots: g.slots.filter(s => s.id !== slotId) }))
+            }
             loadSlots()
           }}
           onClose={() => { setGantt(null); loadSlots() }}

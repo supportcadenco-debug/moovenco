@@ -143,6 +143,123 @@ export async function genererSquelettePourCircuit(
   }
 }
 
+// ─── Recalcul complet d'une journée ──────────────────────────────────────────
+
+// Labels considérés comme des tampons générés automatiquement (à régénérer)
+const TAMPONS = ['PDS', 'HLP', 'MEP', 'FDS', 'MAD']
+
+/**
+ * Récupère une adresse complète depuis son id (pour les services manuels).
+ */
+async function getAddressById(addressId: string | null): Promise<AddressLike | null> {
+  if (!addressId) return null
+  const { data } = await supabase
+    .from('addresses')
+    .select('id, name, address, lat, lng')
+    .eq('id', addressId)
+    .single()
+  if (!data) return null
+  return { id: data.id, name: data.name, lat: data.lat, lng: data.lng }
+}
+
+/**
+ * Recalcule TOUT le squelette d'une journée :
+ *  1. Récupère les vrais services (tout sauf tampons PDS/HLP/MEP/FDS)
+ *  2. Supprime les anciens tampons
+ *  3. Régénère PDS/HLP/MEP/FDS autour des services conservés
+ *
+ * Appelé à chaque ajout ou suppression de créneau pour garder le squelette
+ * cohérent (les FDS/HLP retour se replacent après le nouveau dernier service).
+ */
+export async function recalculerJournee(
+  planningId: string,
+  driverId: string
+): Promise<GenerationResult> {
+  // 1. Charger tous les créneaux de la journée
+  const { data: allSlots } = await supabase
+    .from('slots')
+    .select('*')
+    .eq('planning_id', planningId)
+    .order('start_time')
+
+  if (!allSlots || allSlots.length === 0) {
+    return { ok: true, inserted: 0, amplitude: 0, compressionApplied: false, alerts: [] }
+  }
+
+  // 2. Séparer les vrais services des tampons
+  const services = allSlots.filter((s: any) => !TAMPONS.includes(s.label))
+  const tampons = allSlots.filter((s: any) => TAMPONS.includes(s.label))
+
+  // Si pas de vrai service, on nettoie juste les tampons orphelins
+  if (services.length === 0) {
+    for (const t of tampons) await supabase.from('slots').delete().eq('id', t.id)
+    return { ok: true, inserted: 0, amplitude: 0, compressionApplied: false, alerts: [] }
+  }
+
+  // 3. Reconstruire les ServiceInput depuis les vrais services
+  const serviceInputs: ServiceInput[] = []
+  for (const s of services) {
+    // Adresses : priorité aux from_address_id/to_address_id (carnet),
+    // sinon on tente via le circuit, sinon fallback texte sans GPS.
+    let fromAddr = await getAddressById(s.from_address_id)
+    let toAddr = await getAddressById(s.to_address_id)
+
+    // Si c'est un circuit scolaire sans adresses explicites, on les déduit
+    if ((!fromAddr || !toAddr) && s.circuit_id) {
+      const svc = await circuitToService(s.circuit_id)
+      if (svc) {
+        if (!fromAddr) fromAddr = svc.from_address
+        if (!toAddr) toAddr = svc.to_address
+      }
+    }
+
+    serviceInputs.push({
+      label: s.label,
+      type: (s.type as any) || 'occasionnel',
+      start_time: s.start_time,
+      end_time: s.end_time,
+      from_address: fromAddr || { name: s.from_label || '', lat: null, lng: null },
+      to_address: toAddr || { name: s.to_label || '', lat: null, lng: null },
+      vehicle: s.vehicle || '',
+      circuit_id: s.circuit_id || null,
+      notes: s.notes || '',
+    })
+  }
+
+  // 4. Supprimer tous les anciens tampons
+  for (const t of tampons) {
+    await supabase.from('slots').delete().eq('id', t.id)
+  }
+
+  // 5. Régénérer le squelette complet autour des services
+  const pointAttache = await getPointAttache(driverId)
+  const result = await buildSkeleton(serviceInputs, pointAttache)
+
+  // 6. Insérer UNIQUEMENT les tampons régénérés (les services existent déjà)
+  //    On reconnaît les tampons par leur label.
+  let inserted = 0
+  for (const sl of result.slots) {
+    if (!TAMPONS.includes(sl.label)) continue  // on ne réinsère pas les services
+    const { error } = await supabase.from('slots').insert({
+      id: generateId(), company_id: COMPANY_ID, planning_id: planningId,
+      label: sl.label, type: sl.type, color: sl.color,
+      start_time: sl.start_time, end_time: sl.end_time,
+      from_label: sl.from_label, to_label: sl.to_label,
+      vehicle: sl.vehicle || '', notes: sl.notes || '',
+      circuit_id: null,
+    })
+    if (!error) inserted++
+  }
+
+  return {
+    ok: true,
+    inserted,
+    amplitude: result.amplitude,
+    compressionApplied: result.compressionApplied,
+    alerts: result.alerts.map(a => ({ code: a.code, severity: a.severity, message: a.message })),
+  }
+}
+
 /**
  * Génère le squelette pour PLUSIEURS circuits sur la même journée (cas d'un
  * conducteur avec 2 circuits scolaires différents -> journée REG).
