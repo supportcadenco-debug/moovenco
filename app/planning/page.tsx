@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/useAuth'
 import { supabase } from '../../src/lib/supabase'
 import DayGantt from './DayGantt'
+import CrossView from './CrossView'
 import Navbar from '../../src/components/Navbar'
 import { genererSquelettePourCircuit, recalculerJournee } from '@/lib/planningEngine'
 import { calculAmplitude, formatDuration, RSE_LIMITS, checkJourneeRse } from '@/lib/rse'
@@ -101,6 +102,8 @@ const EMPTY_FORM = {
 export default function Planning() {
   const { profile: authProfile, ready } = useAuth('planning')
   const [weekOffset, setWeekOffset] = useState(0)
+  const [viewMode, setViewMode] = useState('normal') // 'normal' | 'cross'
+  const [nbDays, setNbDays] = useState(3)
   const [drivers, setDrivers] = useState([])
   const [plannings, setPlannings] = useState({})
   const [slots, setSlots] = useState({})
@@ -732,6 +735,16 @@ export default function Planning() {
         <button onClick={() => setWeekOffset(0)} style={{ background: '#2EC971', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 12px', borderRadius: '5px', cursor: 'pointer' }}>
           Aujourd'hui
         </button>
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,.08)', borderRadius: '6px', padding: '2px', marginLeft: '4px' }}>
+          <button onClick={() => setViewMode('normal')}
+            style={{ background: viewMode === 'normal' ? '#0E5AA7' : 'transparent', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+            📅 Semaine
+          </button>
+          <button onClick={() => setViewMode('cross')}
+            style={{ background: viewMode === 'cross' ? '#0E5AA7' : 'transparent', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+            ⊞ Croisée
+          </button>
+        </div>
         <div style={{ marginLeft: 'auto' }}>
           <button onClick={handleEnvoiPlanning} disabled={sendingPlanning}
             style={{ background: sendingPlanning ? '#8A95A3' : '#0E5AA7', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 14px', borderRadius: '5px', cursor: 'pointer' }}>
@@ -746,6 +759,31 @@ export default function Planning() {
         <div style={{ flex: 1, overflow: 'auto' }}>
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8A95A3', fontSize: '13px' }}>Chargement…</div>
+          ) : viewMode === 'cross' ? (
+            <CrossView
+              drivers={drivers}
+              dates={dates}
+              plannings={plannings}
+              slots={slots}
+              dateKey={dateKey}
+              isToday={isToday}
+              nbDays={nbDays}
+              setNbDays={setNbDays}
+              totalAlerts={(() => {
+                let count = 0
+                drivers.forEach(drv => {
+                  dates.slice(0, nbDays).forEach(d => {
+                    const plan = plannings[`${drv.id}_${dateKey(d)}`]
+                    const ds = plan ? (slots[plan.id] || []) : []
+                    if (calculAmplitude(ds) > RSE_LIMITS.AMPLITUDE_MAX_NORMAL) count++
+                  })
+                })
+                return count
+              })()}
+              onCellClick={(drv, d, daySlots, plan) => {
+                setGantt({ driver: drv, date: d, slots: daySlots, planId: plan?.id })
+              }}
+            />
           ) : (
             <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '700px' }}>
               <thead>
