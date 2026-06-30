@@ -1025,13 +1025,18 @@ export default function Planning() {
             }
           }}
           onDeleteSlot={async (slotId) => {
+            // Récupérer le planning_id du slot AVANT suppression (fiable, sans dépendre du state)
+            const { data: slotToDelete } = await supabase.from('slots')
+              .select('planning_id').eq('id', slotId).single()
+            const planningId = slotToDelete?.planning_id
+
             await supabase.from('slots').delete().eq('id', slotId)
-            const planKey = `${gantt.driver.id}_${dateKey(gantt.date)}`
-            const plan = plannings[planKey]
-            if (plan) {
-              // Recalcul auto : les tampons se replacent autour des services restants
-              await recalculerJournee(plan.id, gantt.driver.id)
-              const { data: newSlots } = await supabase.from('slots').select('*').eq('planning_id', plan.id).order('start_time')
+
+            if (planningId) {
+              // Recalcul auto : régénère les tampons autour des services restants,
+              // et nettoie tout s'il ne reste plus aucun service.
+              await recalculerJournee(planningId, gantt.driver.id)
+              const { data: newSlots } = await supabase.from('slots').select('*').eq('planning_id', planningId).order('start_time')
               setGantt(g => ({ ...g, slots: newSlots || [] }))
             } else {
               setGantt(g => ({ ...g, slots: g.slots.filter(s => s.id !== slotId) }))
