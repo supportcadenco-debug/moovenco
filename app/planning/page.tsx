@@ -142,6 +142,36 @@ export default function Planning() {
     if (drivers.length > 0) loadSlots()
   }, [drivers, weekOffset])
 
+  // Raccourcis clavier : flèches gauche/droite pour naviguer dans le temps
+  useEffect(() => {
+    function onKey(e) {
+      // Ne pas intercepter si on tape dans un champ
+      const tag = (e.target?.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return
+
+      // Si la vue détail croisée est ouverte → navigue les jours
+      if (crossDetail) {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); setCrossDetail(cd => { const d = new Date(cd.date); d.setDate(d.getDate() - 1); return { date: d } }) }
+        if (e.key === 'ArrowRight') { e.preventDefault(); setCrossDetail(cd => { const d = new Date(cd.date); d.setDate(d.getDate() + 1); return { date: d } }) }
+        if (e.key === 'Escape') { setCrossDetail(null) }
+        return
+      }
+
+      // Si le Gantt journée est ouvert → Échap pour fermer
+      if (gantt) {
+        if (e.key === 'Escape') { setGantt(null); loadSlots() }
+        return
+      }
+
+      // Vue planning principale → flèches = changement de semaine
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setWeekOffset(w => w - 1) }
+      if (e.key === 'ArrowRight') { e.preventDefault(); setWeekOffset(w => w + 1) }
+      if (e.key === 'Home') { e.preventDefault(); setWeekOffset(0) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [crossDetail, gantt])
+
   async function loadDrivers() {
     const { data } = await supabase.from('profiles').select('*')
       .eq('company_id', COMPANY_ID).eq('role', 'conducteur').order('name')
