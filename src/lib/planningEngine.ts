@@ -145,8 +145,16 @@ export async function genererSquelettePourCircuit(
 
 // ─── Recalcul complet d'une journée ──────────────────────────────────────────
 
-// Labels considérés comme des tampons générés automatiquement (à régénérer)
-const TAMPONS = ['PDS', 'HLP', 'MEP', 'FDS', 'MAD']
+// Préfixes de labels considérés comme des tampons générés automatiquement.
+// On détecte par préfixe (pas égalité exacte) pour attraper les variantes
+// comme "HLP retour", "PDS matin", etc.
+const TAMPON_PREFIXES = ['PDS', 'HLP', 'MEP', 'FDS', 'MAD']
+
+function estTampon(label: string | null | undefined): boolean {
+  if (!label) return false
+  const l = label.trim().toUpperCase()
+  return TAMPON_PREFIXES.some(p => l.startsWith(p))
+}
 
 /**
  * Récupère une adresse complète depuis son id (pour les services manuels).
@@ -186,9 +194,9 @@ export async function recalculerJournee(
     return { ok: true, inserted: 0, amplitude: 0, compressionApplied: false, alerts: [] }
   }
 
-  // 2. Séparer les vrais services des tampons
-  const services = allSlots.filter((s: any) => !TAMPONS.includes(s.label))
-  const tampons = allSlots.filter((s: any) => TAMPONS.includes(s.label))
+  // 2. Séparer les vrais services des tampons (détection par préfixe)
+  const services = allSlots.filter((s: any) => !estTampon(s.label))
+  const tampons = allSlots.filter((s: any) => estTampon(s.label))
 
   // Si pas de vrai service, on nettoie juste les tampons orphelins
   if (services.length === 0) {
@@ -239,7 +247,7 @@ export async function recalculerJournee(
   //    On reconnaît les tampons par leur label.
   let inserted = 0
   for (const sl of result.slots) {
-    if (!TAMPONS.includes(sl.label)) continue  // on ne réinsère pas les services
+    if (!estTampon(sl.label)) continue  // on ne réinsère pas les services
     const { error } = await supabase.from('slots').insert({
       id: generateId(), company_id: COMPANY_ID, planning_id: planningId,
       label: sl.label, type: sl.type, color: sl.color,

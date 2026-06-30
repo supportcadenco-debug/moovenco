@@ -142,10 +142,11 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
     if (!form || !form.label) return
     const mainSlot = { ...form }
     delete mainSlot.id; delete mainSlot.readonly; delete mainSlot.climatise_required
+    // On ajoute UNIQUEMENT le service. Les tampons PDS/HLP/MEP/FDS sont générés
+    // automatiquement par le moteur (recalculerJournee) côté page.tsx, qui calcule
+    // les vrais HLP via OSRM et un squelette unique pour toute la journée.
+    // (L'ancienne génération figée par service est supprimée pour éviter les doublons.)
     await onAddSlot(mainSlot)
-    if (autoNeutral && form.type !== 'neutre' && form.type !== 'repos') {
-      for (const n of generateNeutralSlots(form)) await onAddSlot(n)
-    }
     setForm(null)
   }
 
