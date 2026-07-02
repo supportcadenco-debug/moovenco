@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Navbar from '../../src/components/Navbar'
+import Sidebar from '../../src/components/Sidebar'
 import VehiclePicker from '../../src/components/VehiclePicker'
 import AddressPicker from '../../src/components/AddressPicker'
+import Adresses from './adresses'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 import { COMPANY_ID, DELETE_PASSWORD, RGO, TVA_TAUX, TYPE_VEHICULE, TYPE_CLIENT, TARIF_MODE, STATUTS_DOC, EMPTY_FORM_DEVIS } from '@/lib/constants'
@@ -32,6 +34,7 @@ export default function Commercial() {
   const [orderDocs, setOrderDocs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [mainTab, setMainTab] = useState('devis')
   const [editId, setEditId] = useState<string | null>(null)
   const [selected, setSelected] = useState<any>(null)
   const [form, setForm] = useState<any>(EMPTY_FORM)
@@ -606,9 +609,24 @@ export default function Commercial() {
     </div>
   )
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
+    <div style={{ height: '100vh', display: 'flex', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
+      <Sidebar currentPage="commercial" />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
-      <Navbar currentPage="commercial" />
+      {/* SOUS-ONGLETS */}
+      <div style={{ background: 'white', borderBottom: '1px solid #D0D4DA', display: 'flex', padding: '0 16px', flexShrink: 0 }}>
+        {[['devis','💼 Devis & Factures'],['adresses','📍 Adresses']].map(([v, l]) => (
+          <button key={v} onClick={() => setMainTab(v)}
+            style={{ background: 'none', border: 'none', fontFamily: 'inherit', fontSize: '11px', fontWeight: mainTab === v ? '600' : '400', color: mainTab === v ? '#0E5AA7' : '#8A95A3', padding: '10px 14px', cursor: 'pointer', borderBottom: `2px solid ${mainTab === v ? '#0E5AA7' : 'transparent'}` }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {mainTab === 'adresses' ? (
+        <Adresses />
+      ) : (
+      <>
 
       {showDeleteModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1090,6 +1108,9 @@ export default function Commercial() {
             <div style={{ fontSize: '8px', color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{l}</div>
           </div>
         ))}
+      </div>
+      </>
+      )}
       </div>
     </div>
   )

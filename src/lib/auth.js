@@ -25,18 +25,23 @@ export async function getPermissions(companyId, role) {
   return perms
 }
 
+// Modules principaux affichés dans la sidebar.
+// Anomalies -> intégré comme sous-onglet dans Atelier
+// Personnel / Clients -> sous-onglets dans Comptabilité
+// Adresses -> sous-onglet dans Commercial
+// Permissions -> déplacé dans SETTINGS_MODULES (icône ⚙️ Réglages)
 export const MODULES = [
-  { key: 'dashboard',   label: 'Dashboard',   icon: '📊', href: '/dashboard' },
-  { key: 'planning',    label: 'Planning',    icon: '📅', href: '/planning' },
-  { key: 'personnel',   label: 'Personnel',   icon: '👥', href: '/personnel' },
-  { key: 'commercial',  label: 'Commercial',  icon: '💼', href: '/commercial' },
-  { key: 'clients',     label: 'Clients',     icon: '👥', href: '/clients' },
+  { key: 'dashboard',    label: 'Dashboard',    icon: '📊', href: '/dashboard' },
+  { key: 'planning',     label: 'Planning',     icon: '📅', href: '/planning' },
+  { key: 'commercial',   label: 'Commercial',   icon: '💼', href: '/commercial' },
   { key: 'comptabilite', label: 'Comptabilité', icon: '💰', href: '/comptabilite' },
-  { key: 'atelier',     label: 'Atelier',     icon: '🔧', href: '/atelier' },
-  { key: 'anomalies',   label: 'Anomalies',   icon: '⚠️', href: '/anomalies' },
-  { key: 'scolaire',    label: 'Scolaire',    icon: '🏫', href: '/scolaire' },
-  { key: 'adresses',    label: 'Adresses',    icon: '📍', href: '/adresses' },
-  { key: 'import',      label: 'Import',      icon: '📥', href: '/import' },
+  { key: 'atelier',      label: 'Atelier',      icon: '🔧', href: '/atelier' },
+  { key: 'scolaire',     label: 'Scolaire',     icon: '🏫', href: '/scolaire' },
+  { key: 'import',       label: 'Import',       icon: '📥', href: '/import' },
+]
+
+// Modules regroupés derrière l'icône ⚙️ Réglages en bas de la sidebar
+export const SETTINGS_MODULES = [
   { key: 'permissions', label: 'Permissions', icon: '🔐', href: '/permissions' },
 ]
 

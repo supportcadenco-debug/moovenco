@@ -1,11 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import Navbar from '../../src/components/Navbar'
+import Sidebar from '../../src/components/Sidebar'
 import Prepaie from './prepaie'
 import Factures from './factures'
 import Bulletins from './bulletins'
 import Tarifs from './tarifs'
+import Personnel from './personnel'
+import Clients from './clients'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 
@@ -62,28 +64,33 @@ export default function Comptabilite() {
     </div>
   )
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
-      <Navbar currentPage="comptabilite" />
-      <div style={{ background: 'white', borderBottom: '1px solid #D0D4DA', display: 'flex', padding: '0 16px', flexShrink: 0 }}>
-        {[
-          ['prepaie',    '📋 Prépaie'],
-          ['factures',   '🧾 Factures'],
-          ['bulletins',  '💼 Bulletins'],
-          ['tarifs',     '💶 Tarifs'],
-          ['documents',  '📎 Documents RH'],
-        ].map(([key, label]) => (
-          <button key={key} onClick={() => { setActiveTab(key); if (key === 'documents') loadRhDocs() }}
-            style={{ background: 'none', border: 'none', fontFamily: 'inherit', fontSize: '11px', fontWeight: activeTab === key ? '700' : '400', color: activeTab === key ? '#0E5AA7' : '#8A95A3', padding: '10px 16px', cursor: 'pointer', borderBottom: `2px solid ${activeTab === key ? '#0E5AA7' : 'transparent'}`, whiteSpace: 'nowrap' }}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {activeTab === 'prepaie'   && <Prepaie />}
-        {activeTab === 'factures'  && <Factures />}
-        {activeTab === 'bulletins' && <Bulletins />}
-        {activeTab === 'tarifs'    && <Tarifs />}
-        {activeTab === 'documents' && (
+    <div style={{ height: '100vh', display: 'flex', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
+      <Sidebar currentPage="comptabilite" />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ background: 'white', borderBottom: '1px solid #D0D4DA', display: 'flex', padding: '0 16px', flexShrink: 0, overflowX: 'auto' }}>
+          {[
+            ['prepaie',    '📋 Prépaie'],
+            ['factures',   '🧾 Factures'],
+            ['bulletins',  '💼 Bulletins'],
+            ['tarifs',     '💶 Tarifs'],
+            ['personnel',  '👥 Personnel'],
+            ['clients',    '🤝 Clients'],
+            ['documents',  '📎 Documents RH'],
+          ].map(([key, label]) => (
+            <button key={key} onClick={() => { setActiveTab(key); if (key === 'documents') loadRhDocs() }}
+              style={{ background: 'none', border: 'none', fontFamily: 'inherit', fontSize: '11px', fontWeight: activeTab === key ? '700' : '400', color: activeTab === key ? '#0E5AA7' : '#8A95A3', padding: '10px 16px', cursor: 'pointer', borderBottom: `2px solid ${activeTab === key ? '#0E5AA7' : 'transparent'}`, whiteSpace: 'nowrap' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {activeTab === 'prepaie'   && <Prepaie />}
+          {activeTab === 'factures'  && <Factures />}
+          {activeTab === 'bulletins' && <Bulletins />}
+          {activeTab === 'tarifs'    && <Tarifs />}
+          {activeTab === 'personnel' && <Personnel />}
+          {activeTab === 'clients'   && <Clients />}
+          {activeTab === 'documents' && (
           <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
             <div style={{ maxWidth: '700px' }}>
               <div style={{ fontSize: '14px', fontWeight: '700', color: '#1A2130', marginBottom: '16px' }}>📎 Documents RH & Comptabilité</div>
@@ -118,6 +125,7 @@ export default function Comptabilite() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
