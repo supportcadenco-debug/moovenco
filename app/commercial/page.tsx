@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Navbar from '../../src/components/Navbar'
+import VehiclePicker from '../../src/components/VehiclePicker'
+import AddressPicker from '../../src/components/AddressPicker'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 import { COMPANY_ID, DELETE_PASSWORD, RGO, TVA_TAUX, TYPE_VEHICULE, TYPE_CLIENT, TARIF_MODE, STATUTS_DOC, EMPTY_FORM_DEVIS } from '@/lib/constants'
@@ -25,6 +27,8 @@ export default function Commercial() {
   const [tarifs, setTarifs] = useState<any[]>([])
   const [drivers, setDrivers] = useState<any[]>([])
   const [clients, setClients] = useState<any[]>([])
+  const [allVehicles, setAllVehicles] = useState<any[]>([])
+  const [addresses, setAddresses] = useState<any[]>([])
   const [orderDocs, setOrderDocs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -57,18 +61,22 @@ export default function Commercial() {
   }, [])
 
   async function loadAll() {
-    const [{ data: f }, { data: o }, { data: t }, { data: d }, { data: c }] = await Promise.all([
+    const [{ data: f }, { data: o }, { data: t }, { data: d }, { data: c }, { data: veh }, { data: adr }] = await Promise.all([
       supabase.from('factures').select('*').eq('company_id', COMPANY_ID).order('created_at', { ascending: false }),
       supabase.from('orders').select('*').eq('company_id', COMPANY_ID).order('created_at', { ascending: false }),
       supabase.from('tarifs').select('*').eq('company_id', COMPANY_ID).eq('actif', true),
       supabase.from('profiles').select('id, name').eq('company_id', COMPANY_ID).eq('role', 'conducteur').eq('active', true).order('name'),
       supabase.from('clients').select('*').eq('company_id', COMPANY_ID).eq('active', true).order('name'),
+      supabase.from('vehicles').select('*').eq('company_id', COMPANY_ID).order('plate'),
+      supabase.from('addresses').select('id, name, address, lat, lng').eq('company_id', COMPANY_ID).order('name'),
     ])
     setFactures(f || [])
     setOrders(o || [])
     setTarifs(t || [])
     setDrivers(d || [])
     setClients(c || [])
+    setAllVehicles(veh || [])
+    setAddresses(adr || [])
     setLoading(false)
   }
 
@@ -837,7 +845,7 @@ export default function Commercial() {
                       </select>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px', marginBottom: '7px' }}>
-                      <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Plaque véhicule</label>{inp(form.vehicule_plaque, (e: any) => setForm((f: any) => ({ ...f, vehicule_plaque: e.target.value })))}</div>
+                      <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Plaque véhicule</label><VehiclePicker vehicles={allVehicles} value={form.vehicule_plaque} onChange={(plate: string) => setForm((f: any) => ({ ...f, vehicule_plaque: plate }))} placeholder="Rechercher un véhicule…" /></div>
                       <div><label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Places car</label>{inp(form.vehicule_places, (e: any) => setForm((f: any) => ({ ...f, vehicule_places: e.target.value })), { type: 'number' })}</div>
                     </div>
                     <div style={{ fontSize: '10px', fontWeight: '700', color: '#8A95A3', textTransform: 'uppercase', letterSpacing: '.4px', margin: '8px 0 6px' }}>Horaires</div>
@@ -854,7 +862,7 @@ export default function Commercial() {
                     {[['Lieu de prise en charge', 'lieu_prise_charge'], ['Lieu de dépose terminale', 'lieu_depose']].map(([label, key]) => (
                       <div key={key} style={{ marginBottom: '7px' }}>
                         <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>{label}</label>
-                        {inp(form[key], (e: any) => setForm((f: any) => ({ ...f, [key]: e.target.value })))}
+                        <AddressPicker addresses={addresses} value={form[key]} onChange={({ label: lbl }: any) => setForm((f: any) => ({ ...f, [key]: lbl }))} placeholder="Rechercher une adresse…" />
                       </div>
                     ))}
                   </div>
