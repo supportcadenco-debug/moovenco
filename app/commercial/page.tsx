@@ -54,6 +54,7 @@ export default function Commercial() {
   const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => { loadAll() }, [])
+  useEffect(() => { document.title = 'Moovenco · Commercial' }, [])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
