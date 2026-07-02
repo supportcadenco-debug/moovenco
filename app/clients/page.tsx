@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Navbar from '../../src/components/Navbar'
+import AddressPicker from '../../src/components/AddressPicker'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 
@@ -34,8 +35,14 @@ export default function Clients() {
   const [uploading, setUploading] = useState(false)
   const [orders, setOrders] = useState<any[]>([])
   const fileRef = useRef<any>(null)
+  const [addresses, setAddresses] = useState<any[]>([])
 
-  useEffect(() => { loadClients() }, [])
+  useEffect(() => { loadClients(); loadAddresses() }, [])
+
+  async function loadAddresses() {
+    const { data } = await supabase.from('addresses').select('id, name, address, lat, lng').eq('company_id', COMPANY_ID).order('name')
+    setAddresses(data || [])
+  }
 
   async function loadClients() {
     const { data } = await supabase.from('clients').select('*')
@@ -182,7 +189,7 @@ export default function Clients() {
                 </div>
 
                 <div style={sectionStyle}>Adresse</div>
-                <div style={{ marginBottom: '8px' }}><label style={labelStyle}>Adresse</label><input value={form.adresse} onChange={s('adresse')} style={inputStyle} /></div>
+                <div style={{ marginBottom: '8px' }}><label style={labelStyle}>Adresse</label><AddressPicker addresses={addresses} value={form.adresse} onChange={({ label }: any) => setForm((f: any) => ({ ...f, adresse: label }))} placeholder="Rechercher une adresse…" /></div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '8px', marginBottom: '8px' }}>
                   <div><label style={labelStyle}>Code postal</label><input value={form.cp} onChange={s('cp')} style={inputStyle} /></div>
                   <div><label style={labelStyle}>Ville</label><input value={form.ville} onChange={s('ville')} style={inputStyle} /></div>
@@ -266,7 +273,7 @@ export default function Clients() {
                     </div>
 
                     <div style={sectionStyle}>Adresse</div>
-                    <div style={{ marginBottom: '8px' }}><label style={labelStyle}>Adresse</label><input defaultValue={selected.adresse} onBlur={e => setSelected((s: any) => ({...s, adresse: e.target.value}))} style={inputStyle} /></div>
+                    <div style={{ marginBottom: '8px' }}><label style={labelStyle}>Adresse</label><AddressPicker addresses={addresses} value={selected.adresse} onChange={({ label }: any) => setSelected((s: any) => ({ ...s, adresse: label }))} placeholder="Rechercher une adresse…" /></div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '8px', marginBottom: '8px' }}>
                       <div><label style={labelStyle}>CP</label><input defaultValue={selected.cp} onBlur={e => setSelected((s: any) => ({...s, cp: e.target.value}))} style={inputStyle} /></div>
                       <div><label style={labelStyle}>Ville</label><input defaultValue={selected.ville} onBlur={e => setSelected((s: any) => ({...s, ville: e.target.value}))} style={inputStyle} /></div>
