@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Navbar from '../../src/components/Navbar'
+import ConsumptionChart from '../../src/components/ConsumptionChart'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 
@@ -227,7 +228,7 @@ export default function Atelier() {
       
       {/* SOUS-ONGLETS */}
       <div style={{ background: 'white', borderBottom: '1px solid #D0D4DA', display: 'flex', padding: '0 16px', flexShrink: 0 }}>
-        {[['vehicules','🚌 Véhicules'],['interventions','🔧 Interventions']].map(([v, l]) => (
+        {[['vehicules','🚌 Véhicules'],['interventions','🔧 Interventions'],['consommation','⛽ Consommation']].map(([v, l]) => (
           <button key={v} onClick={() => setActiveView(v)}
             style={{ background: 'none', border: 'none', fontFamily: 'inherit', fontSize: '11px', fontWeight: activeView === v ? '600' : '400', color: activeView === v ? '#0E5AA7' : '#8A95A3', padding: '10px 14px', cursor: 'pointer', borderBottom: `2px solid ${activeView === v ? '#0E5AA7' : 'transparent'}` }}>
             {l}
@@ -504,6 +505,10 @@ export default function Atelier() {
                 })}
               </div>
             </>
+          )}
+
+          {activeView === 'consommation' && (
+            <ConsumptionChart vehicles={vehicles} />
           )}
 
           {activeView === 'interventions' && !selected && (
