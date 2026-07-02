@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Navbar from '../../src/components/Navbar'
+import VehiclePicker from '../../src/components/VehiclePicker'
 import { supabase } from '../../src/lib/supabase'
 import dynamic from 'next/dynamic'
 import { useAuth } from '@/lib/useAuth'
@@ -435,15 +436,11 @@ export default function Scolaire() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <span style={{ fontSize: '10px', fontWeight: '700', color: '#1A2130' }}>🚌 Véhicule par défaut</span>
                     </div>
-                    <select defaultValue={selected.vehicule_defaut || ''} onChange={async e => {
-                      const val = e.target.value
-                      await supabase.from('circuits').update({ vehicule_defaut: val || null }).eq('id', selected.id)
-                      setSelected(s => ({ ...s, vehicule_defaut: val }))
+                    <VehiclePicker vehicles={vehicles} value={selected.vehicule_defaut || ''} onChange={async (plate) => {
+                      await supabase.from('circuits').update({ vehicule_defaut: plate || null }).eq('id', selected.id)
+                      setSelected(s => ({ ...s, vehicule_defaut: plate }))
                       loadAll()
-                    }} style={{ width: '100%', padding: '5px 7px', border: '1px solid #D0D4DA', borderRadius: '4px', fontSize: '11px', fontFamily: 'inherit' }}>
-                      <option value="">— Aucun —</option>
-                      {vehicles.map(v => <option key={v.id} value={v.plate}>{v.plate} — {v.type} {v.seats ? v.seats+'p' : ''}</option>)}
-                    </select>
+                    }} placeholder="Rechercher un véhicule…" />
                   </div>
 
                   <div style={{ display: 'flex', gap: '5px' }}>
