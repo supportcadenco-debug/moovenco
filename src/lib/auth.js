@@ -26,6 +26,7 @@ export async function getPermissions(companyId, role) {
 }
 
 export const MODULES = [
+  { key: 'dashboard',   label: 'Dashboard',   icon: '📊', href: '/dashboard' },
   { key: 'planning',    label: 'Planning',    icon: '📅', href: '/planning' },
   { key: 'personnel',   label: 'Personnel',   icon: '👥', href: '/personnel' },
   { key: 'commercial',  label: 'Commercial',  icon: '💼', href: '/commercial' },
