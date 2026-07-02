@@ -66,6 +66,7 @@ export default function Atelier() {
   const [assigningDriver, setAssigningDriver] = useState(false)
 
   useEffect(() => { loadAll() }, [])
+  useEffect(() => { document.title = 'Moovenco · Atelier' }, [])
 
   async function loadAll() {
     const [{ data: v }, { data: i }] = await Promise.all([

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Sidebar from '../../src/components/Sidebar'
 import Prepaie from './prepaie'
 import Factures from './factures'
@@ -24,6 +24,7 @@ export default function Comptabilite() {
   const { ready } = useAuth('comptabilite')
 
   const [activeTab, setActiveTab] = useState('prepaie')
+  useEffect(() => { document.title = 'Moovenco · Comptabilité' }, [])
   const [rhDocs, setRhDocs] = useState<any[]>([])
   const [uploadingDoc, setUploadingDoc] = useState(false)
 

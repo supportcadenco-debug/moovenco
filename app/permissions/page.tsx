@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Navbar from '../../src/components/Navbar'
+import Sidebar from '../../src/components/Sidebar'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 
@@ -44,6 +44,7 @@ export default function Permissions() {
   const [selectedRole, setSelectedRole] = useState('exploitant')
 
   useEffect(() => { loadPermissions() }, [])
+  useEffect(() => { document.title = 'Moovenco · Permissions' }, [])
 
   async function loadPermissions() {
     const { data, error } = await supabase.from('permissions').select('*').eq('company_id', COMPANY_ID)
@@ -79,8 +80,9 @@ export default function Permissions() {
     </div>
   )
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
-      <Navbar currentPage="permissions" />
+    <div style={{ height: '100vh', display: 'flex', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
+      <Sidebar currentPage="permissions" />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <div style={{ width: '220px', minWidth: '220px', background: 'white', borderRight: '1px solid #D0D4DA', overflow: 'auto' }}>
           <div style={{ padding: '12px 14px', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '.5px', color: '#8A95A3', borderBottom: '1px solid #F0F2F5' }}>Rôles</div>
@@ -191,6 +193,7 @@ export default function Permissions() {
       <div style={{ background: '#253044', padding: '6px 16px', display: 'flex', gap: '20px', flexShrink: 0 }}>
         <div><div style={{ fontSize: '14px', fontWeight: '700', color: 'white' }}>{ROLES.length}</div><div style={{ fontSize: '8px', color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Rôles</div></div>
         <div><div style={{ fontSize: '14px', fontWeight: '700', color: 'white' }}>{MODULES.length}</div><div style={{ fontSize: '8px', color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Modules</div></div>
+      </div>
       </div>
     </div>
   )

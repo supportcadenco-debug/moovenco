@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import Sidebar from '../../src/components/Sidebar'
@@ -64,6 +64,7 @@ function parseNumber(val) {
 export default function ImportPage() {
   const { loading: authLoading } = useAuth()
   const [importType, setImportType] = useState('ca') // 'ca' | 'couts'
+  useEffect(() => { document.title = 'Moovenco · Import' }, [])
   const [rawRows, setRawRows] = useState([])
   const [columns, setColumns] = useState([])
   const [mapping, setMapping] = useState({})

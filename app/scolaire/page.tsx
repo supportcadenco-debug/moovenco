@@ -42,6 +42,7 @@ export default function Scolaire() {
   const [importing, setImporting] = useState(false)
 
   useEffect(() => { loadAll() }, [])
+  useEffect(() => { document.title = 'Moovenco · Scolaire' }, [])
 
   async function loadAll() {
     const [{ data: c }, { data: cs }, { data: a }, { data: v }] = await Promise.all([

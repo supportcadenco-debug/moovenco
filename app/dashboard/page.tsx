@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [periodMonths, setPeriodMonths] = useState(12)
 
   useEffect(() => { loadAll() }, [])
+  useEffect(() => { document.title = 'Moovenco · Dashboard' }, [])
 
   async function loadAll() {
     const [{ data: f }, { data: h }, { data: c }, { data: fl }, { data: v }, { data: d }, { data: i }] = await Promise.all([

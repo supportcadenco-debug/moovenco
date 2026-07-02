@@ -124,6 +124,7 @@ export default function Planning() {
   const [circuits, setCircuits] = useState([])
   const [circuitSearch, setCircuitSearch] = useState('')
   const [sendingPlanning, setSendingPlanning] = useState(false)
+  useEffect(() => { document.title = 'Moovenco · Planning' }, [])
 
   useEffect(() => {
     async function init() {
