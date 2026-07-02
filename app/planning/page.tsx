@@ -6,7 +6,7 @@ import { supabase } from '../../src/lib/supabase'
 import DayGantt from './DayGantt'
 import CrossView from './CrossView'
 import CrossDetailView from './CrossDetailView'
-import Navbar from '../../src/components/Navbar'
+import Sidebar from '../../src/components/Sidebar'
 import { genererSquelettePourCircuit, recalculerJournee } from '@/lib/planningEngine'
 import { calculAmplitude, formatDuration, RSE_LIMITS, checkJourneeRse } from '@/lib/rse'
 
@@ -730,10 +730,9 @@ export default function Planning() {
     </div>
   )
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
-
-      {/* NAVBAR */}
-      <Navbar currentPage="planning" />
+    <div style={{ height: '100vh', display: 'flex', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
+      <Sidebar currentPage="planning" />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
       {/* BARRE SEMAINE */}
       <div style={{ background: '#253044', color: 'white', display: 'flex', alignItems: 'center', padding: '0 16px', height: '38px', gap: '10px', flexShrink: 0 }}>
@@ -1226,6 +1225,7 @@ export default function Planning() {
           })}
         />
       )}
+      </div>
     </div>
   )
 }

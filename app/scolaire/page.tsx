@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Navbar from '../../src/components/Navbar'
+import Sidebar from '../../src/components/Sidebar'
 import VehiclePicker from '../../src/components/VehiclePicker'
 import { supabase } from '../../src/lib/supabase'
 import dynamic from 'next/dynamic'
@@ -215,9 +215,9 @@ export default function Scolaire() {
     </div>
   )
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
-
-      <Navbar currentPage="scolaire" />
+    <div style={{ height: '100vh', display: 'flex', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
+      <Sidebar currentPage="scolaire" />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
       {/* BARRE ACTION */}
       <div style={{ background: '#253044', padding: '0 16px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0, gap: '6px' }}>
@@ -583,6 +583,7 @@ export default function Scolaire() {
             <div style={{ fontSize: '8px', color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{l}</div>
           </div>
         ))}
+      </div>
       </div>
     </div>
   )

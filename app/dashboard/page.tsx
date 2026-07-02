@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import Navbar from '../../src/components/Navbar'
+import Sidebar from '../../src/components/Sidebar'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 
@@ -175,9 +175,9 @@ export default function DashboardPage() {
 
   if (authLoading || loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#F4F5F7' }}>
-        <Navbar currentPage="dashboard" />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#8A95A3', fontSize: '13px' }}>Chargement…</div>
+      <div style={{ minHeight: '100vh', display: 'flex', background: '#F4F5F7' }}>
+        <Sidebar currentPage="dashboard" />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8A95A3', fontSize: '13px' }}>Chargement…</div>
       </div>
     )
   }
@@ -185,9 +185,9 @@ export default function DashboardPage() {
   const kpiCardStyle = { background: 'white', borderRadius: '10px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F5F7', fontFamily: "'Inter', -apple-system, sans-serif" }}>
-      <Navbar currentPage="dashboard" />
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 16px 60px' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', background: '#F4F5F7', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+      <Sidebar currentPage="dashboard" />
+      <div style={{ flex: 1, maxWidth: '1200px', margin: '0 auto', padding: '20px 16px 60px' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
           <h1 style={{ fontSize: '18px', fontWeight: '700', color: '#1A2130' }}>📊 Tableau de bord</h1>

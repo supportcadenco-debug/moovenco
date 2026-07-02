@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
-import Navbar from '../../src/components/Navbar'
+import Sidebar from '../../src/components/Sidebar'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 
@@ -187,9 +187,9 @@ export default function ImportPage() {
   if (authLoading) return null
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F5F7', fontFamily: "'Inter', -apple-system, sans-serif" }}>
-      <Navbar />
-      <div style={{ maxWidth: '820px', margin: '0 auto', padding: '24px 16px' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', background: '#F4F5F7', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+      <Sidebar currentPage="import" />
+      <div style={{ flex: 1, maxWidth: '820px', margin: '0 auto', padding: '24px 16px' }}>
         <h1 style={{ fontSize: '18px', fontWeight: '700', color: '#1A2130', marginBottom: '4px' }}>📥 Import de données historiques</h1>
         <p style={{ fontSize: '12px', color: '#8A95A3', marginBottom: '20px' }}>
           Importez votre chiffre d'affaires ou vos coûts antérieurs à l'installation de Moovenco, depuis un fichier Excel ou CSV.

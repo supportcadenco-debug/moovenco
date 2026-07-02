@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Navbar from '../../src/components/Navbar'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 
@@ -117,14 +116,12 @@ export default function Anomalies() {
   const s = (key) => ({ target: { value } }) => setForm(f => ({ ...f, [key]: value }))
 
   if (!ready) return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ECEEF1', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
       <div style={{ fontSize: '13px', color: '#8A95A3' }}>Chargement…</div>
     </div>
   )
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', background: '#ECEEF1' }}>
-
-      <Navbar currentPage="anomalies" />
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, fontFamily: 'Inter, sans-serif' }}>
 
       {/* BARRE ACTION */}
       <div style={{ background: '#253044', padding: '0 16px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0 }}>
