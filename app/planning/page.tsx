@@ -7,7 +7,7 @@ import DayGantt from './DayGantt'
 import CrossView from './CrossView'
 import CrossDetailView from './CrossDetailView'
 import Sidebar from '../../src/components/Sidebar'
-import { genererSquelettePourCircuit, recalculerJournee } from '@/lib/planningEngine'
+import { genererSquelettePourCircuit, recalculerJournee, reassignSlotToDriver } from '@/lib/planningEngine'
 import { calculAmplitude, formatDuration, RSE_LIMITS, checkJourneeRse } from '@/lib/rse'
 
 // Détermine le code de journée à afficher dans la vue générale
@@ -1114,6 +1114,19 @@ export default function Planning() {
           slots={gantt.slots}
           vehicles={allVehicles}
           addresses={allAddresses}
+          allDrivers={drivers}
+          onReassignSlot={async (slot, fromDriverId, toDriverId) => {
+            const result = await reassignSlotToDriver(slot.id, fromDriverId, toDriverId, dateKey(gantt.date))
+            if (result.ok) {
+              setMessage(`✅ "${slot.label}" réaffecté — tampons recalculés des deux côtés`)
+              // Le conducteur affiché a perdu son créneau : on referme le Gantt
+              // et on rafraîchit toute la semaine pour voir les deux journées à jour.
+              setGantt(null)
+              await loadSlots()
+            } else {
+              setMessage('❌ ' + (result.error || 'Erreur de réaffectation'))
+            }
+          }}
           onAddSlot={async (slot) => {
             await handleCreateSlotFromGantt(slot, gantt.driver.id, gantt.date)
             const planKey = `${gantt.driver.id}_${dateKey(gantt.date)}`
@@ -1224,6 +1237,28 @@ export default function Planning() {
           onNextDay={() => setCrossDetail(cd => {
             const d = new Date(cd.date); d.setDate(d.getDate() + 1); return { date: d }
           })}
+          onDeleteSlot={async (slotId, driverId) => {
+            const { data: slotToDelete } = await supabase.from('slots')
+              .select('planning_id, label').eq('id', slotId).single()
+            const planningId = slotToDelete?.planning_id
+            const TAMPONS = ['PDS', 'HLP', 'MEP', 'FDS', 'MAD']
+            const estTampon = TAMPONS.some(p => (slotToDelete?.label || '').toUpperCase().startsWith(p))
+
+            await supabase.from('slots').delete().eq('id', slotId)
+            if (planningId && !estTampon) {
+              await recalculerJournee(planningId, driverId)
+            }
+            await loadSlots()
+          }}
+          onReassignSlot={async (slot, fromDriverId, toDriverId) => {
+            const result = await reassignSlotToDriver(slot.id, fromDriverId, toDriverId, dateKey(crossDetail.date))
+            if (result.ok) {
+              setMessage(`✅ "${slot.label}" réaffecté — tampons recalculés des deux côtés`)
+            } else {
+              setMessage('❌ ' + (result.error || 'Erreur de réaffectation'))
+            }
+            await loadSlots()
+          }}
         />
       )}
       </div>

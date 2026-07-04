@@ -3,6 +3,13 @@
 import { useState } from 'react'
 import { calculAmplitude, formatDuration, RSE_LIMITS, checkJourneeRse, severityColor } from '@/lib/rse'
 
+const TAMPON_PREFIXES = ['PDS', 'HLP', 'MEP', 'FDS', 'MAD']
+function estTampon(label) {
+  if (!label) return false
+  const l = String(label).trim().toUpperCase()
+  return TAMPON_PREFIXES.some(p => l.startsWith(p))
+}
+
 const SLOT_TYPES = [
   { value: 'scolaire',    label: 'Scolaire',     color: '#1A2130' },
   { value: 'occasionnel', label: 'Occasionnel',  color: '#D4720A' },
@@ -45,23 +52,32 @@ function AdresseLink({ label, icon = '📍' }) {
 }
 
 // Créneau déroulant dans la liste
-function SlotRow({ slot, onDelete }) {
+function SlotRow({ slot, onDelete, draggable, onDragStart, onDragEnd, isTampon }) {
   const [open, setOpen] = useState(false)
   const typeInfo = SLOT_TYPES.find(t => t.value === slot.type)
   const dur = duration(slot.start_time, slot.end_time)
 
+  function handleDelete(e) {
+    e.stopPropagation()
+    const msg = `Supprimer le créneau "${slot.label}" (${slot.start_time} → ${slot.end_time}) ?` +
+      (isTampon ? '' : '\n\nLes créneaux tampons (PDS/HLP/MEP/FDS) seront recalculés automatiquement autour du reste de la journée.')
+    if (window.confirm(msg)) onDelete(slot.id)
+  }
+
   return (
-    <div style={{ border: '1px solid #E2E6EA', borderRadius: '6px', overflow: 'hidden', marginBottom: '4px' }}>
+    <div draggable={draggable} onDragStart={e => draggable && onDragStart && onDragStart(e, slot)} onDragEnd={onDragEnd}
+      style={{ border: '1px solid #E2E6EA', borderRadius: '6px', overflow: 'hidden', marginBottom: '4px', cursor: draggable ? 'grab' : 'default' }}>
       {/* En-tête cliquable */}
       <div onClick={() => setOpen(o => !o)}
         style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', background: open ? '#F0F2F5' : '#F8F9FB', cursor: 'pointer', userSelect: 'none' }}>
+        {draggable && <span style={{ color: '#CDD3DA', fontSize: '11px', flexShrink: 0 }} title="Glisser vers un autre conducteur">⠿</span>}
         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: slot.color || typeInfo?.color || '#9AA3B2', flexShrink: 0 }} />
         <span style={{ fontSize: '11px', fontWeight: '700', color: '#1A2130', minWidth: '90px' }}>{slot.label}</span>
         <span style={{ fontSize: '10px', color: '#8A95A3' }}>{slot.start_time} → {slot.end_time}</span>
         {dur && <span style={{ fontSize: '9px', color: '#8A95A3', background: '#E2E6EA', padding: '1px 5px', borderRadius: '8px' }}>{dur}</span>}
         {slot.vehicle && <span style={{ fontSize: '10px', color: '#4A5568' }}>🚌 {slot.vehicle}</span>}
         <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#8A95A3' }}>{open ? '▲' : '▼'}</span>
-        <button onClick={e => { e.stopPropagation(); onDelete(slot.id) }}
+        <button onClick={handleDelete}
           style={{ background: '#FFEBEE', border: 'none', color: '#C62828', fontSize: '10px', padding: '2px 6px', borderRadius: '3px', cursor: 'pointer', flexShrink: 0 }}>✕</button>
       </div>
 
@@ -100,7 +116,7 @@ function SlotRow({ slot, onDelete }) {
 const TOTAL_MIN = 24 * 60
 const HOUR_W = 60
 
-export default function DayGantt({ driver, date, slots, vehicles, orders, circuits, addresses, onAddSlot, onDeleteSlot, onClose, onEnvoiJour, sendingPlanning, onFillFromOrder, onFillFromCircuit }) {
+export default function DayGantt({ driver, date, slots, vehicles, orders, circuits, addresses, allDrivers, onAddSlot, onDeleteSlot, onReassignSlot, onClose, onEnvoiJour, sendingPlanning, onFillFromOrder, onFillFromCircuit }) {
   const [form, setForm] = useState(null)
   const [filterClimatise, setFilterClimatise] = useState(false)
   const [autoNeutral, setAutoNeutral] = useState(true)
@@ -108,6 +124,7 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
   const [orderSearch, setOrderSearch] = useState('')
   const [circuitSearch, setCircuitSearch] = useState('')
   const [showHourTable, setShowHourTable] = useState(true)
+  const [draggingSlot, setDraggingSlot] = useState(null)
 
   const totalW = HOUR_W * 24
 
@@ -289,6 +306,34 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
               </div>
             </div>
 
+            {/* ZONE DE DÉPÔT — visible uniquement pendant un glisser-déposer */}
+            {draggingSlot && allDrivers && allDrivers.length > 1 && (
+              <div style={{ marginTop: '14px', padding: '10px', background: '#F0F7FF', border: '2px dashed #0E5AA7', borderRadius: '8px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#0E5AA7', marginBottom: '8px', textAlign: 'center' }}>
+                  ↔ Déposez sur un conducteur pour réaffecter "{draggingSlot.label}"
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {allDrivers.filter(d => d.id !== driver.id).map(d => (
+                    <div key={d.id}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={async e => {
+                        e.preventDefault()
+                        if (draggingSlot && onReassignSlot) {
+                          await onReassignSlot(draggingSlot, driver.id, d.id)
+                        }
+                        setDraggingSlot(null)
+                      }}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '8px 12px', background: 'white', border: '1px solid #D0D4DA', borderRadius: '8px', minWidth: '70px' }}>
+                      <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: d.color || '#0E5AA7', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700' }}>
+                        {d.initials}
+                      </div>
+                      <span style={{ fontSize: '9px', color: '#4A5568', textAlign: 'center' }}>{d.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* PANNEAU CONFORMITÉ RSE */}
             {rseCheck && (
               <div style={{ marginTop: '16px', border: `1px solid ${rseCheck.severity === 'danger' ? '#FFCDD2' : rseCheck.severity === 'warning' ? '#FFE0B2' : '#A5D6A7'}`, borderRadius: '8px', overflow: 'hidden' }}>
@@ -332,7 +377,12 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
                   )}
                 </div>
                 {showHourTable && sortedSlots.map(slot => (
-                  <SlotRow key={slot.id} slot={slot} onDelete={onDeleteSlot} />
+                  <SlotRow key={slot.id} slot={slot} onDelete={onDeleteSlot}
+                    isTampon={estTampon(slot.label)}
+                    draggable={!estTampon(slot.label) && allDrivers && allDrivers.length > 1}
+                    onDragStart={(e, s) => { setDraggingSlot(s); e.dataTransfer.effectAllowed = 'move' }}
+                    onDragEnd={() => setDraggingSlot(null)}
+                  />
                 ))}
               </div>
             )}
@@ -374,7 +424,11 @@ export default function DayGantt({ driver, date, slots, vehicles, orders, circui
                     {form.vehicle && <div>🚌 Véhicule : <strong>{form.vehicle}</strong></div>}
                     {form.notes && <div style={{ whiteSpace: 'pre-wrap', background: '#FFF8E1', padding: '5px 8px', borderRadius: '4px' }}>{form.notes}</div>}
                   </div>
-                  <button onClick={() => { onDeleteSlot(form.id); setForm(null) }}
+                  <button onClick={() => {
+                    if (window.confirm(`Supprimer le créneau "${form.label}" (${form.start_time} → ${form.end_time}) ?`)) {
+                      onDeleteSlot(form.id); setForm(null)
+                    }
+                  }}
                     style={{ background: '#FFEBEE', border: 'none', color: '#C62828', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '8px', borderRadius: '5px', cursor: 'pointer' }}>
                     🗑 Supprimer
                   </button>

@@ -317,3 +317,55 @@ export async function genererSquelettePourCircuits(
     alerts: result.alerts.map(a => ({ code: a.code, severity: a.severity, message: a.message })),
   }
 }
+
+// ─── Réaffectation d'un créneau à un autre conducteur (glisser-déposer) ─────
+
+/**
+ * Déplace un créneau d'un conducteur vers un autre, pour une date donnée.
+ * Crée le planning (journée) du conducteur cible s'il n'existe pas encore.
+ * Recalcule ensuite le squelette des DEUX journées (source et destination)
+ * pour que les tampons (PDS/HLP/MEP/FDS) se replacent correctement des deux côtés.
+ *
+ * @param slotId        Le créneau à déplacer
+ * @param fromDriverId  Conducteur d'origine
+ * @param toDriverId    Conducteur de destination
+ * @param dateStr       Date au format 'YYYY-MM-DD' (dateKey)
+ */
+export async function reassignSlotToDriver(
+  slotId: string,
+  fromDriverId: string,
+  toDriverId: string,
+  dateStr: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (fromDriverId === toDriverId) return { ok: true }
+
+  // 1. Récupérer le créneau et son planning d'origine
+  const { data: slot } = await supabase.from('slots').select('*').eq('id', slotId).single()
+  if (!slot) return { ok: false, error: 'Créneau introuvable' }
+  const fromPlanningId = slot.planning_id
+
+  // 2. Trouver ou créer le planning (journée) du conducteur cible
+  const { data: existingPlan } = await supabase.from('planning')
+    .select('*').eq('driver_id', toDriverId).eq('date', dateStr).maybeSingle()
+
+  let toPlanningId = existingPlan?.id
+  if (!toPlanningId) {
+    const { data: newPlan, error } = await supabase.from('planning').insert({
+      id: generateId(), company_id: COMPANY_ID, driver_id: toDriverId, date: dateStr,
+      day_type: slot.type === 'scolaire' ? 'Scolaire' : 'Occasionnel',
+      day_color: slot.color || '#1A2130',
+    }).select().single()
+    if (error || !newPlan) return { ok: false, error: 'Impossible de créer la journée du conducteur cible' }
+    toPlanningId = newPlan.id
+  }
+
+  // 3. Déplacer le créneau (on ne déplace que le VRAI service ; les tampons
+  //    seront régénérés par recalculerJournee de chaque côté).
+  await supabase.from('slots').update({ planning_id: toPlanningId }).eq('id', slotId)
+
+  // 4. Recalculer les deux journées impactées
+  if (fromPlanningId) await recalculerJournee(fromPlanningId, fromDriverId)
+  await recalculerJournee(toPlanningId, toDriverId)
+
+  return { ok: true }
+}

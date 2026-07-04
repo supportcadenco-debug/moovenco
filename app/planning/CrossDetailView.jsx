@@ -25,7 +25,7 @@ const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Sa
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
 
 // Colonne d'un conducteur : frise + tableau heure par heure
-function DriverColumn({ driver, daySlots, allDrivers, onChangeDriver, onRemove, canRemove }) {
+function DriverColumn({ driver, daySlots, allDrivers, onChangeDriver, onRemove, canRemove, onDeleteSlot, onReassignSlot, draggingSlot, onDragStartSlot, onDragEndSlot }) {
   const [showDropdown, setShowDropdown] = useState(false)
   const sorted = [...(daySlots || [])].sort((a, b) => timeToMin(a.start_time) - timeToMin(b.start_time))
   const amplitude = calculAmplitude(sorted)
@@ -52,15 +52,29 @@ function DriverColumn({ driver, daySlots, allDrivers, onChangeDriver, onRemove, 
       if (h >= Math.floor(start / 60) && h < Math.ceil(end / 60)) { found = s; isStart = h === Math.floor(start / 60); break }
     }
     const label = `${String(h).padStart(2, '0')}h`
+    const tampon = found && estTampon(found.label)
+    const canDrag = found && isStart && !tampon && onReassignSlot
     hourRows.push(
-      <div key={h} style={{ display: 'flex', borderBottom: '0.5px solid #F0F2F5', minHeight: '26px' }}>
+      <div key={h}
+        draggable={canDrag}
+        onDragStart={e => { if (canDrag) { e.dataTransfer.effectAllowed = 'move'; onDragStartSlot && onDragStartSlot(found, driver.id) } }}
+        style={{ display: 'flex', borderBottom: '0.5px solid #F0F2F5', minHeight: '26px', cursor: canDrag ? 'grab' : 'default' }}>
         <div style={{ width: '34px', flexShrink: 0, fontSize: '9px', color: '#8A95A3', padding: '4px 5px', borderRight: '0.5px solid #F0F2F5' }}>{label}</div>
         <div style={{ flex: 1, padding: '3px 7px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', background: found ? '#F8F9FB' : 'transparent', borderLeft: found ? `2px solid ${found.color || '#9AA3B2'}` : 'none' }}>
           {found ? (
             isStart ? (
               <>
+                {canDrag && <span style={{ color: '#CDD3DA', fontSize: '10px' }}>⠿</span>}
                 <span style={{ fontWeight: '600', color: '#1A2130' }}>{found.label}</span>
-                {found.vehicle && <span style={{ marginLeft: 'auto', fontSize: '8px', color: '#4A5568', background: '#ECEEF1', padding: '1px 5px', borderRadius: '6px' }}>🚌 {found.vehicle}</span>}
+                {found.vehicle && <span style={{ fontSize: '8px', color: '#4A5568', background: '#ECEEF1', padding: '1px 5px', borderRadius: '6px' }}>🚌 {found.vehicle}</span>}
+                {onDeleteSlot && (
+                  <button onClick={() => {
+                      const msg = `Supprimer le créneau "${found.label}" (${found.start_time} → ${found.end_time}) ?` +
+                        (tampon ? '' : '\n\nLes créneaux tampons seront recalculés automatiquement.')
+                      if (window.confirm(msg)) onDeleteSlot(found.id, driver.id)
+                    }}
+                    style={{ marginLeft: 'auto', background: '#FFEBEE', border: 'none', color: '#C62828', fontSize: '9px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+                )}
               </>
             ) : <span style={{ color: '#CDD3DA', fontSize: '9px' }}>···</span>
           ) : <span style={{ color: '#CDD3DA' }}>Libre</span>}
@@ -69,8 +83,19 @@ function DriverColumn({ driver, daySlots, allDrivers, onChangeDriver, onRemove, 
     )
   }
 
+  const isDropTarget = draggingSlot && draggingSlot.fromDriverId !== driver?.id
+
   return (
-    <div style={{ flex: 1, minWidth: '280px', border: '1px solid #E2E6EA', borderRadius: '10px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div
+      onDragOver={e => { if (isDropTarget) e.preventDefault() }}
+      onDrop={async e => {
+        e.preventDefault()
+        if (isDropTarget && onReassignSlot) {
+          await onReassignSlot(draggingSlot.slot, draggingSlot.fromDriverId, driver.id)
+        }
+        onDragEndSlot && onDragEndSlot()
+      }}
+      style={{ flex: 1, minWidth: '280px', border: isDropTarget ? '2px dashed #0E5AA7' : '1px solid #E2E6EA', background: isDropTarget ? '#F0F7FF' : 'white', borderRadius: '10px', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'border-color .15s' }}>
       {/* En-tête conducteur avec sélecteur */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderBottom: '1px solid #E2E6EA', background: '#F8F9FB' }}>
         <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: driver?.color || '#0E5AA7', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '700', flexShrink: 0 }}>
@@ -120,13 +145,14 @@ function DriverColumn({ driver, daySlots, allDrivers, onChangeDriver, onRemove, 
   )
 }
 
-export default function CrossDetailView({ date, drivers, plannings, slots, dateKey, onClose, onPrevDay, onNextDay, initialDrivers = null }) {
+export default function CrossDetailView({ date, drivers, plannings, slots, dateKey, onClose, onPrevDay, onNextDay, initialDrivers = null, onDeleteSlot, onReassignSlot }) {
   // Les conducteurs affichés (2 par défaut)
   const [shownDriverIds, setShownDriverIds] = useState(
     initialDrivers && initialDrivers.length > 0
       ? initialDrivers.slice(0, 2).map(d => d.id)
       : drivers.slice(0, 2).map(d => d.id)
   )
+  const [draggingSlot, setDraggingSlot] = useState(null) // { slot, fromDriverId }
 
   const dateStr = date ? `${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}` : ''
 
@@ -188,6 +214,11 @@ export default function CrossDetailView({ date, drivers, plannings, slots, dateK
                   setShownDriverIds(copy)
                 }}
                 onRemove={() => setShownDriverIds(shownDriverIds.filter((_, i) => i !== idx))}
+                onDeleteSlot={onDeleteSlot ? async (slotId, driverId) => { await onDeleteSlot(slotId, driverId) } : null}
+                onReassignSlot={onReassignSlot}
+                draggingSlot={draggingSlot}
+                onDragStartSlot={(slot, fromDriverId) => setDraggingSlot({ slot, fromDriverId })}
+                onDragEndSlot={() => setDraggingSlot(null)}
               />
             )
           })}
