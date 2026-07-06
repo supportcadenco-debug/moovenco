@@ -6,6 +6,7 @@ import Sidebar from '../../src/components/Sidebar'
 import VehiclePicker from '../../src/components/VehiclePicker'
 import AddressPicker from '../../src/components/AddressPicker'
 import Adresses from './adresses'
+import Commandes from './commandes'
 import { supabase } from '../../src/lib/supabase'
 import { useAuth } from '@/lib/useAuth'
 import { COMPANY_ID, DELETE_PASSWORD, RGO, TVA_TAUX, TYPE_VEHICULE, TYPE_CLIENT, TARIF_MODE, STATUTS_DOC, EMPTY_FORM_DEVIS } from '@/lib/constants'
@@ -35,6 +36,7 @@ export default function Commercial() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [mainTab, setMainTab] = useState('devis')
+  const [unreadRetours, setUnreadRetours] = useState(0)
   const [editId, setEditId] = useState<string | null>(null)
   const [selected, setSelected] = useState<any>(null)
   const [form, setForm] = useState<any>(EMPTY_FORM)
@@ -54,6 +56,13 @@ export default function Commercial() {
   const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => { loadAll() }, [])
+  useEffect(() => { loadUnreadRetoursCount() }, [])
+
+  async function loadUnreadRetoursCount() {
+    const { count } = await supabase.from('orders').select('id', { count: 'exact', head: true })
+      .eq('company_id', COMPANY_ID).not('retour_recu_at', 'is', null).eq('retour_vu', false)
+    setUnreadRetours(count || 0)
+  }
   useEffect(() => { document.title = 'Moovenco · Commercial' }, [])
 
   useEffect(() => {
@@ -614,18 +623,35 @@ export default function Commercial() {
       <Sidebar currentPage="commercial" />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
+      {/* BANNIÈRE ALERTE RETOURS BC */}
+      {unreadRetours > 0 && mainTab !== 'commandes' && (
+        <div onClick={() => setMainTab('commandes')}
+          style={{ background: '#FFF3E0', borderBottom: '1px solid #FFE0B2', padding: '9px 16px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flexShrink: 0 }}>
+          <span style={{ fontSize: '14px' }}>🔔</span>
+          <span style={{ fontSize: '12px', fontWeight: '700', color: '#D4720A' }}>
+            {unreadRetours} retour{unreadRetours > 1 ? 's' : ''} BC à traiter
+          </span>
+          <span style={{ fontSize: '11px', color: '#D4720A', textDecoration: 'underline', marginLeft: '4px' }}>Voir →</span>
+        </div>
+      )}
+
       {/* SOUS-ONGLETS */}
       <div style={{ background: 'white', borderBottom: '1px solid #D0D4DA', display: 'flex', padding: '0 16px', flexShrink: 0 }}>
-        {[['devis','💼 Devis & Factures'],['adresses','📍 Adresses']].map(([v, l]) => (
+        {[['devis','💼 Devis & Factures'],['commandes','📋 Commandes'],['adresses','📍 Adresses']].map(([v, l]) => (
           <button key={v} onClick={() => setMainTab(v)}
-            style={{ background: 'none', border: 'none', fontFamily: 'inherit', fontSize: '11px', fontWeight: mainTab === v ? '600' : '400', color: mainTab === v ? '#0E5AA7' : '#8A95A3', padding: '10px 14px', cursor: 'pointer', borderBottom: `2px solid ${mainTab === v ? '#0E5AA7' : 'transparent'}` }}>
+            style={{ background: 'none', border: 'none', fontFamily: 'inherit', fontSize: '11px', fontWeight: mainTab === v ? '600' : '400', color: mainTab === v ? '#0E5AA7' : '#8A95A3', padding: '10px 14px', cursor: 'pointer', borderBottom: `2px solid ${mainTab === v ? '#0E5AA7' : 'transparent'}`, display: 'flex', alignItems: 'center', gap: '6px' }}>
             {l}
+            {v === 'commandes' && unreadRetours > 0 && (
+              <span style={{ background: '#C62828', color: 'white', fontSize: '9px', fontWeight: '700', borderRadius: '9px', padding: '1px 6px', minWidth: '16px', textAlign: 'center' }}>{unreadRetours}</span>
+            )}
           </button>
         ))}
       </div>
 
       {mainTab === 'adresses' ? (
         <Adresses />
+      ) : mainTab === 'commandes' ? (
+        <Commandes onUnreadCountChange={setUnreadRetours} />
       ) : (
       <>
 
