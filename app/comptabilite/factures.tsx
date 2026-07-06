@@ -145,6 +145,11 @@ export default function Factures() {
         bc_reference: form.bc_reference || null,
         montant_ht: ht, montant_tva: tva, montant_ttc: ttc,
         lignes, notes: form.notes,
+        retour_km_reel: form.retour_km_reel || null,
+        retour_vehicule_reel: form.retour_vehicule_reel || null,
+        retour_heure_dep_reel: form.retour_heure_dep_reel || null,
+        retour_heure_ret_reel: form.retour_heure_ret_reel || null,
+        inclure_retour_pdf: form.inclure_retour_pdf || false,
         updated_at: new Date().toISOString(),
       }).eq('id', editId)
       if (error) setMessage('Erreur : ' + error.message)
@@ -173,6 +178,11 @@ export default function Factures() {
         bc_reference: form.bc_reference || null,
         montant_ht: ht, montant_tva: tva, montant_ttc: ttc,
         lignes, notes: form.notes,
+        retour_km_reel: form.retour_km_reel || null,
+        retour_vehicule_reel: form.retour_vehicule_reel || null,
+        retour_heure_dep_reel: form.retour_heure_dep_reel || null,
+        retour_heure_ret_reel: form.retour_heure_ret_reel || null,
+        inclure_retour_pdf: form.inclure_retour_pdf || false,
       })
       if (error) setMessage('Erreur : ' + error.message)
       else {
@@ -209,6 +219,11 @@ export default function Factures() {
       frais_attente: doc.frais_attente || 0,
       bc_reference: doc.bc_reference || '',
       notes: doc.notes || '',
+      retour_km_reel: doc.retour_km_reel || null,
+      retour_vehicule_reel: doc.retour_vehicule_reel || '',
+      retour_heure_dep_reel: doc.retour_heure_dep_reel || '',
+      retour_heure_ret_reel: doc.retour_heure_ret_reel || '',
+      inclure_retour_pdf: doc.inclure_retour_pdf || false,
     })
     setClientSearch(doc.client_nom || '')
     setEditId(doc.id)
@@ -463,7 +478,33 @@ export default function Factures() {
                   </button>
                 ))}
                 {orders.length > 0 && !editId && (
-                  <select onChange={e => { const o = orders.find((x: any) => x.id === e.target.value); if (o) { const t = getTarifAuto(o.vehicle_type || 'autocar', 'mairie'); setForm((f: any) => ({ ...f, client_nom: o.client_responsable || '', client_adresse: o.client_adresse || '', client_email: o.client_mail || '', vehicle_type: o.vehicle_type || 'autocar', date_service: o.date_service || '', bc_reference: o.bon_commande_ref || '', distance_km: o.distance_km || '', tarif_km: t?.tarif_km || '', tarif_journee: t?.tarif_journee || '', notes: `Réf. : ${o.reference}` })); setClientSearch(o.client_responsable || '') }}}
+                  <select onChange={e => {
+                      const o = orders.find((x: any) => x.id === e.target.value)
+                      if (!o) return
+                      const t = getTarifAuto(o.vehicle_type || 'autocar', 'mairie')
+                      // Si un retour BC a été validé, on utilise le VRAI kilométrage
+                      // (retour_km_ret_garage - retour_km_dep_garage) plutôt que l'estimation du devis.
+                      const hasRetour = !!o.retour_recu_at
+                      const kmReel = (o.retour_km_ret_garage != null && o.retour_km_dep_garage != null)
+                        ? (o.retour_km_ret_garage - o.retour_km_dep_garage)
+                        : null
+                      const distanceFinale = kmReel != null ? kmReel : (o.distance_km || '')
+                      setForm((f: any) => ({
+                        ...f,
+                        client_nom: o.client_responsable || '', client_adresse: o.client_adresse || '', client_email: o.client_mail || '',
+                        vehicle_type: o.vehicle_type || 'autocar', date_service: o.date_service || '', bc_reference: o.bon_commande_ref || '',
+                        distance_km: distanceFinale,
+                        tarif_km: t?.tarif_km || '', tarif_journee: t?.tarif_journee || '',
+                        notes: `Réf. : ${o.reference}` + (kmReel != null ? ` — km réel retour BC (${o.retour_km_dep_garage} → ${o.retour_km_ret_garage})` : ''),
+                        // Infos retour BC reportées sur la facture (si disponibles)
+                        retour_km_reel: kmReel,
+                        retour_vehicule_reel: o.retour_vehicule_reel || '',
+                        retour_heure_dep_reel: o.retour_heure_dep_client || '',
+                        retour_heure_ret_reel: o.retour_heure_ret_client || '',
+                        inclure_retour_pdf: hasRetour, // coché par défaut si un retour existe, modifiable
+                      }))
+                      setClientSearch(o.client_responsable || '')
+                    }}
                     style={{ marginLeft: 'auto', padding: '5px 8px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit', color: '#4A5568' }}>
                     <option value=''>⚡ Pré-remplir depuis une commande…</option>
                     {orders.map((o: any) => <option key={o.id} value={o.id}>{o.reference} — {o.destination || '?'}</option>)}
@@ -569,13 +610,39 @@ export default function Factures() {
                   {form.tarif_mode === 'km' && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px', marginBottom: '7px' }}>
                       <div>
-                        <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Distance (km)</label>
+                        <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>
+                          Distance (km){form.retour_km_reel != null && <span style={{ color: '#1A9E50', fontWeight: '700' }}> — km réel ✓</span>}
+                        </label>
                         {inp(form.distance_km, (e: any) => setForm((f: any) => ({ ...f, distance_km: e.target.value })), { type: 'number' })}
                       </div>
                       <div>
                         <label style={{ fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }}>Tarif / km (€)</label>
                         {inp(form.tarif_km, (e: any) => setForm((f: any) => ({ ...f, tarif_km: e.target.value })), { type: 'number', step: '0.0001' })}
                       </div>
+                    </div>
+                  )}
+
+                  {(form.retour_km_reel != null || form.retour_vehicule_reel || form.retour_heure_dep_reel) && (
+                    <div style={{ background: '#F0F7FF', border: '1px solid #B8D9F5', borderRadius: '6px', padding: '10px', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#0E5AA7', marginBottom: '6px' }}>↩ Infos retour BC détectées</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '8px' }}>
+                        <div>
+                          <label style={{ fontSize: '9px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '2px' }}>Véhicule réel</label>
+                          {inp(form.retour_vehicule_reel, (e: any) => setForm((f: any) => ({ ...f, retour_vehicule_reel: e.target.value })))}
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '9px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '2px' }}>Départ réel</label>
+                          {inp(form.retour_heure_dep_reel, (e: any) => setForm((f: any) => ({ ...f, retour_heure_dep_reel: e.target.value })))}
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '9px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '2px' }}>Retour réel</label>
+                          {inp(form.retour_heure_ret_reel, (e: any) => setForm((f: any) => ({ ...f, retour_heure_ret_reel: e.target.value })))}
+                        </div>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: '#4A5568', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={!!form.inclure_retour_pdf} onChange={e => setForm((f: any) => ({ ...f, inclure_retour_pdf: e.target.checked }))} />
+                        Afficher ces informations sur le PDF envoyé au client
+                      </label>
                     </div>
                   )}
 
