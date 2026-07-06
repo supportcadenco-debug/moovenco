@@ -96,6 +96,26 @@ async function buildPDF(doc: any) {
     y += notesH + 6
   }
 
+  // Infos retour BC (véhicule réel, horaires réels) — uniquement si l'exploitant
+  // a coché "inclure sur le PDF" pour ce document.
+  if (doc.inclure_retour_pdf && (doc.retour_vehicule_reel || doc.retour_heure_dep_reel || doc.retour_heure_ret_reel || doc.retour_km_reel != null)) {
+    const retourItems: string[][] = [
+      ...(doc.retour_vehicule_reel ? [['Véhicule', doc.retour_vehicule_reel]] : []),
+      ...(doc.retour_km_reel != null ? [['Distance réelle', `${doc.retour_km_reel} km`]] : []),
+      ...(doc.retour_heure_dep_reel ? [['Départ', doc.retour_heure_dep_reel]] : []),
+      ...(doc.retour_heure_ret_reel ? [['Retour', doc.retour_heure_ret_reel]] : []),
+    ]
+    const retourH = 12
+    pdf.setFillColor(240,247,255); pdf.rect(m, y, col, retourH, 'F')
+    pdf.setDrawColor(184,217,245); pdf.setLineWidth(0.2); pdf.rect(m, y, col, retourH)
+    pdf.setFontSize(7); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...bleu)
+    pdf.text('SERVICE RÉALISÉ', m + 4, y + 5)
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(...dark)
+    const retourText = retourItems.map(([label, val]) => `${label} : ${val}`).join('   —   ')
+    pdf.text(retourText, m + 4, y + 9.5)
+    y += retourH + 6
+  }
+
   if (isDevis) {
     y += 4
     const sigW = (col - 10) / 2
