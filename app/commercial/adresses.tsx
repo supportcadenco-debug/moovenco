@@ -9,6 +9,7 @@ const CATEGORIES = [
   { value: 'ecole', label: 'École',          icon: '🏫' },
   { value: 'arret', label: 'Arrêt de bus',   icon: '🚏' },
   { value: 'client',label: 'Client',         icon: '👥' },
+  { value: 'site',  label: 'Site',            icon: '🏭' },
   { value: 'hotel', label: 'Hôtel',          icon: '🏨' },
   { value: 'autre', label: 'Autre',          icon: '📌' },
 ]
@@ -123,6 +124,7 @@ export default function Adresses() {
   const [showMap, setShowMap] = useState(false)
   const [mapKey, setMapKey] = useState(0)
   const [deleting, setDeleting] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   useEffect(() => { loadAddresses() }, [])
   async function loadAddresses() {
     const { data, error } = await supabase.from('addresses').select('*').eq('company_id', COMPANY_ID).order('city').order('name')
@@ -172,16 +174,39 @@ export default function Adresses() {
     if (!form.name || !form.city) { setMessage('Nom et ville obligatoires'); return }
     setSaving(true)
     setMessage('')
-    const { error } = await supabase.from('addresses').insert({
-      id: generateId(), company_id: COMPANY_ID,
+    const payload = {
       name: form.name, address: form.address, city: form.city, zip_code: form.zip_code,
       lat: form.lat ? parseFloat(form.lat) : null,
       lng: form.lng ? parseFloat(form.lng) : null,
       category: form.category, is_stop: form.is_stop, notes: form.notes,
-    })
+    }
+    let error
+    if (editingId) {
+      ({ error } = await supabase.from('addresses').update(payload).eq('id', editingId))
+    } else {
+      ({ error } = await supabase.from('addresses').insert({ id: generateId(), company_id: COMPANY_ID, ...payload }))
+    }
     if (error) setMessage('Erreur : ' + error.message)
-    else { setMessage('✅ Adresse enregistrée'); setForm(EMPTY_FORM); setShowForm(false); setShowMap(false); loadAddresses() }
+    else {
+      setMessage(editingId ? '✅ Adresse modifiée' : '✅ Adresse enregistrée')
+      setForm(EMPTY_FORM); setShowForm(false); setShowMap(false); setEditingId(null); setSelected(null)
+      loadAddresses()
+    }
     setSaving(false)
+  }
+
+  function startEdit(addr) {
+    setForm({
+      name: addr.name || '', address: addr.address || '', city: addr.city || '', zip_code: addr.zip_code || '',
+      lat: addr.lat != null ? String(addr.lat) : '', lng: addr.lng != null ? String(addr.lng) : '',
+      category: addr.category || 'autre', is_stop: !!addr.is_stop, notes: addr.notes || '',
+    })
+    setEditingId(addr.id)
+    setSelected(null)
+    setShowForm(true)
+    setShowMap(false)
+    setSearchResults([])
+    setMessage('')
   }
 
   // Vérifie si cette adresse est utilisée comme arrêt dans un ou plusieurs
@@ -192,7 +217,11 @@ export default function Adresses() {
       .select('circuit_id, circuits(name, code)')
       .eq('address_id', addressId)
     if (!data || data.length === 0) return []
-    const noms = data.map((row) => row.circuits?.code || row.circuits?.name || 'Circuit inconnu')
+    const noms = data.map((row) => {
+      // Supabase type la jointure comme un tableau, même en relation 1-1
+      const c = Array.isArray(row.circuits) ? row.circuits[0] : row.circuits
+      return c?.code || c?.name || 'Circuit inconnu'
+    })
     return [...new Set(noms)]
   }
 
@@ -238,7 +267,7 @@ export default function Adresses() {
     if (!acc[key]) acc[key] = []
     acc[key].push(a)
     return acc
-  }, {})
+  }, {} as Record<string, any[]>)
   const sf = (key) => ({ target: { value } }) => setForm((f) => ({ ...f, [key]: value }))
   if (!ready) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
@@ -248,7 +277,7 @@ export default function Adresses() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, fontFamily: 'Inter, sans-serif' }}>
       <div style={{ background: '#253044', padding: '0 16px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0 }}>
-        <button onClick={() => { setShowForm(true); setSelected(null); setForm(EMPTY_FORM); setMessage(''); setShowMap(false); setSearchResults([]) }}
+        <button onClick={() => { setShowForm(true); setSelected(null); setForm(EMPTY_FORM); setEditingId(null); setMessage(''); setShowMap(false); setSearchResults([]) }}
           style={{ background: '#2EC971', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 14px', borderRadius: '5px', cursor: 'pointer' }}>
           + Ajouter une adresse
         </button>
@@ -333,9 +362,9 @@ export default function Adresses() {
           <div style={{ width: '380px', minWidth: '380px', background: 'white', borderLeft: '1px solid #D0D4DA', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #D0D4DA', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8F9FB', flexShrink: 0 }}>
               <div style={{ fontSize: '13px', fontWeight: '700', color: '#1A2130' }}>
-                {showForm ? '+ Nouvelle adresse' : selected?.name}
+                {showForm ? (editingId ? '✏️ Modifier l\'adresse' : '+ Nouvelle adresse') : selected?.name}
               </div>
-              <button onClick={() => { setShowForm(false); setSelected(null); setShowMap(false) }}
+              <button onClick={() => { setShowForm(false); setSelected(null); setShowMap(false); setEditingId(null); setForm(EMPTY_FORM) }}
                 style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#8A95A3' }}>✕</button>
             </div>
             <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
@@ -444,7 +473,7 @@ export default function Adresses() {
                   {message && <div style={{ background: message.includes('✅') ? '#E8F5E9' : '#FFEBEE', color: message.includes('✅') ? '#1A9E50' : '#C62828', fontSize: '11px', padding: '8px 10px', borderRadius: '5px' }}>{message}</div>}
                   <button onClick={handleSave} disabled={saving}
                     style={{ background: saving ? '#8A95A3' : '#0E5AA7', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '12px', fontWeight: '700', padding: '10px', borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer' }}>
-                    {saving ? 'Enregistrement…' : '💾 Enregistrer'}
+                    {saving ? 'Enregistrement…' : (editingId ? '💾 Enregistrer les modifications' : '💾 Enregistrer')}
                   </button>
                 </div>
               )}
@@ -483,6 +512,10 @@ export default function Adresses() {
                       {selected.is_stop ? '🚏 Arrêt scolaire actif' : '🚏 Ajouter aux arrêts scolaires'}
                     </span>
                   </div>
+                  <button onClick={() => startEdit(selected)}
+                    style={{ background: '#E8F0FB', border: 'none', color: '#0E5AA7', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '8px', borderRadius: '5px', cursor: 'pointer', width: '100%' }}>
+                    ✏️ Modifier cette adresse
+                  </button>
                   <button onClick={() => handleDelete(selected.id)} disabled={deleting}
                     style={{ background: deleting ? '#F0F2F5' : '#FFEBEE', border: 'none', color: deleting ? '#8A95A3' : '#C62828', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '8px', borderRadius: '5px', cursor: deleting ? 'not-allowed' : 'pointer', width: '100%' }}>
                     {deleting ? '⏳ Vérification…' : '🗑 Supprimer'}
