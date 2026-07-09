@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../src/lib/supabase'
 import AddressPicker from '../../src/components/AddressPicker'
 import { COMPANY_ID, TYPE_VEHICULE, TYPE_CLIENT, TARIF_MODE, TVA_TAUX } from '@/lib/constants'
-import { generateId, calcMontantHT, calcTotaux, ensureClient, getTarifAuto, formatMontant } from '@/lib/utils'
+import { generateId, calcTotaux, ensureClient, getTarifAuto, formatMontant } from '@/lib/utils'
 
 const STATUT_INFO = {
   devis:      { bg: '#F0F2F5', text: '#4A5568', label: '📝 Devis' },
-  confirmee:  { bg: '#E3F2FD', text: '#1565C0', label: '✓ Confirmée' },
+  confirmee:  { bg: '#E3F2FD', text: '#1565C0', label: '📋 Bon de commande' },
   affectee:   { bg: '#FFF3E0', text: '#D4720A', label: '🚌 Affectée' },
   realisee:   { bg: '#F0F7FF', text: '#0E5AA7', label: '↩ Réalisée' },
   facturee:   { bg: '#E8F5E9', text: '#1A9E50', label: '🧾 Facturée' },
@@ -91,11 +91,31 @@ export default function Commandes({ onUnreadCountChange }) {
   // ─── Création d'un nouveau devis ─────────────────────────────────────────
   function applyTarifAuto(vehicleType, clientType, mode) {
     const t = getTarifAuto(vehicleType, clientType)
-    if (t) setForm(f => ({ ...f, tarif_km: mode === 'km' ? (t.tarif_km || f.tarif_km) : f.tarif_km, tarif_journee: mode === 'jour' ? (t.tarif_journee || f.tarif_journee) : f.tarif_journee }))
+    if (!t) return
+    // getTarifAuto peut renvoyer des paliers sous forme de tableau : on force en nombre
+    const tKm = num(t.tarif_km, NaN)
+    const tJour = num(t.tarif_journee, NaN)
+    setForm(f => ({
+      ...f,
+      tarif_km: mode === 'km' && Number.isFinite(tKm) ? String(tKm) : f.tarif_km,
+      tarif_journee: mode !== 'km' && Number.isFinite(tJour) ? String(tJour) : f.tarif_journee,
+    }))
+  }
+
+  // Convertit n'importe quelle valeur (chaîne, tableau de paliers…) en nombre sûr
+  function num(v, fallback = 0) {
+    if (Array.isArray(v)) v = v[0]
+    const n = parseFloat(v)
+    return Number.isFinite(n) ? n : fallback
   }
 
   function computeMontants() {
-    const ht = calcMontantHT(form)
+    // Calcul local, indépendant de calcMontantHT, pour éviter tout souci de
+    // format (chaînes des inputs, tableaux de paliers renvoyés par getTarifAuto)
+    const fraisAttente = num(form.frais_attente)
+    const ht = form.tarif_mode === 'km'
+      ? num(form.distance_km) * num(form.tarif_km) + fraisAttente
+      : num(form.tarif_journee) * num(form.nb_jours, 1) + fraisAttente
     return calcTotaux(ht, TVA_TAUX)
   }
 
@@ -111,8 +131,10 @@ export default function Commandes({ onUnreadCountChange }) {
       client_mail: form.client_email, client_siret: form.client_siret, client_type: form.client_type,
       destination: form.destination, date_service: form.date_service || null,
       vehicle_type: form.vehicle_type, tarif_mode: form.tarif_mode,
-      distance_km: form.distance_km || null, tarif_km: form.tarif_km || null, tarif_journee: form.tarif_journee || null,
-      nb_jours: form.nb_jours, frais_attente: form.frais_attente || 0,
+      distance_km: form.distance_km ? num(form.distance_km) : null,
+      tarif_km: form.tarif_km ? num(form.tarif_km) : null,
+      tarif_journee: form.tarif_journee ? num(form.tarif_journee) : null,
+      nb_jours: num(form.nb_jours, 1), frais_attente: num(form.frais_attente),
       montant_ht: ht, montant_tva: tva, montant_ttc: ttc,
       tva_taux: TVA_TAUX, notes: form.notes,
     })
@@ -126,11 +148,20 @@ export default function Commandes({ onUnreadCountChange }) {
     setSaving(false)
   }
 
-  async function confirmerDevis(cmd) {
+  async function transformerEnBC(cmd) {
+    // Garde : un devis ne peut être transformé qu'une seule fois.
+    // On revérifie le statut en base pour éviter tout doublon (double clic, onglet ouvert ailleurs…)
+    const { data: fresh } = await supabase.from('commandes').select('status').eq('id', cmd.id).single()
+    if (fresh && fresh.status !== 'devis') {
+      setMessage('❌ Ce devis a déjà été transformé en bon de commande')
+      loadAll()
+      return
+    }
+    if (!window.confirm(`Transformer le devis N°${cmd.numero_sequence} en bon de commande ?`)) return
     await supabase.from('commandes').update({
       status: 'confirmee', devis_signe: true, devis_date_signature: new Date().toISOString().slice(0, 10),
     }).eq('id', cmd.id)
-    setMessage('✅ Devis confirmé — prêt à être affecté dans le Planning')
+    setMessage('✅ Bon de commande créé — prêt à être affecté dans le Planning')
     loadAll()
   }
 
@@ -235,13 +266,13 @@ export default function Commandes({ onUnreadCountChange }) {
               <div>
                 <label style={labelSt}>Type de client</label>
                 <select style={inputSt} value={form.client_type} onChange={e => setForm(f => ({ ...f, client_type: e.target.value }))}>
-                  {TYPE_CLIENT.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {TYPE_CLIENT.map(t => { const v = t.value ?? t.key; return <option key={v} value={v}>{t.label ?? t.name ?? v}</option> })}
                 </select>
               </div>
               <div>
                 <label style={labelSt}>Type de véhicule</label>
                 <select style={inputSt} value={form.vehicle_type} onChange={e => { setForm(f => ({ ...f, vehicle_type: e.target.value })); applyTarifAuto(e.target.value, form.client_type, form.tarif_mode) }}>
-                  {TYPE_VEHICULE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {TYPE_VEHICULE.map(t => { const v = t.value ?? t.key; return <option key={v} value={v}>{t.label ?? t.name ?? v}</option> })}
                 </select>
               </div>
             </div>
@@ -317,7 +348,7 @@ export default function Commandes({ onUnreadCountChange }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {selected.status === 'devis' && (
                   <>
-                    <button onClick={() => confirmerDevis(selected)} style={{ background: '#1A9E50', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '7px 14px', borderRadius: '6px', cursor: 'pointer' }}>✓ Client a confirmé</button>
+                    <button onClick={() => transformerEnBC(selected)} style={{ background: '#1A9E50', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '7px 14px', borderRadius: '6px', cursor: 'pointer' }}>📋 Transformer en bon de commande</button>
                     <button onClick={() => annulerDevis(selected)} style={{ background: '#FFEBEE', border: 'none', color: '#C62828', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '7px 14px', borderRadius: '6px', cursor: 'pointer' }}>✕ Annuler</button>
                   </>
                 )}
@@ -330,7 +361,7 @@ export default function Commandes({ onUnreadCountChange }) {
             {/* Statuts informatifs sans retour BC */}
             {selected.status === 'confirmee' && (
               <div style={{ background: '#F0F7FF', borderRadius: '8px', padding: '14px 16px', fontSize: '12px', color: '#0E5AA7', marginBottom: '14px' }}>
-                ✓ Devis confirmé le {selected.devis_date_signature || '—'}. En attente d'affectation conducteur/véhicule dans le Planning.
+                📋 Bon de commande créé le {selected.devis_date_signature || '—'}. En attente d'affectation conducteur/véhicule dans le Planning.
               </div>
             )}
             {selected.status === 'affectee' && (
