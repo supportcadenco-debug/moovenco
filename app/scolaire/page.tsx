@@ -63,6 +63,46 @@ export default function Scolaire() {
     setLoading(false)
   }
 
+  // Vérifie si ce circuit est utilisé dans des créneaux déjà planifiés,
+  // AVANT de tenter la suppression — pour prévenir plutôt que planter.
+  async function trouverUsagesCircuit(circuitId) {
+    const { data } = await supabase
+      .from('slots')
+      .select('id, planning_id, planning(date)')
+      .eq('circuit_id', circuitId)
+      .limit(10)
+    return data || []
+  }
+
+  async function deleteCircuit(circuit) {
+    if (!window.confirm(`Supprimer définitivement le circuit "${circuit.code || circuit.name}" ?\n\nCette action est irréversible et supprimera aussi tous ses arrêts.`)) return
+
+    setMessage('')
+    const usages = await trouverUsagesCircuit(circuit.id)
+    if (usages.length > 0) {
+      const dates = usages.map(u => u.planning?.date).filter(Boolean).slice(0, 5)
+      alert(
+        `Impossible de supprimer ce circuit : il est déjà utilisé dans ${usages.length}${usages.length >= 10 ? '+' : ''} créneau(x) planifié(s)` +
+        (dates.length > 0 ? ` (ex: ${dates.join(', ')})` : '') +
+        `.\n\nRetirez d'abord ces créneaux du Planning avant de supprimer le circuit ici.`
+      )
+      return
+    }
+
+    // Supprimer d'abord les arrêts (pas de suppression en cascade automatique),
+    // puis le circuit lui-même.
+    await supabase.from('circuit_stops').delete().eq('circuit_id', circuit.id)
+    const { error } = await supabase.from('circuits').delete().eq('id', circuit.id)
+    if (error) {
+      alert('Erreur lors de la suppression du circuit : ' + error.message)
+      console.error('Erreur suppression circuit:', error)
+      return
+    }
+    setSelected(null)
+    setMessage('✅ Circuit supprimé')
+    loadAll()
+  }
+
   function handleAddPendingStop({ name, lat, lng }) {
     const id = generateId()
     setPendingStops(prev => [...prev, {
@@ -397,6 +437,10 @@ export default function Scolaire() {
                         {circuitStops.length} arrêt{circuitStops.length > 1 ? 's' : ''} • {circuitStops.filter(s => s.addresses?.lat).length} géolocalisés
                       </div>
                     </div>
+                    <button onClick={() => deleteCircuit(selected)}
+                      style={{ marginLeft: 'auto', background: '#FFEBEE', border: 'none', color: '#C62828', fontFamily: 'inherit', fontSize: '10px', fontWeight: '600', padding: '5px 9px', borderRadius: '5px', cursor: 'pointer', flexShrink: 0 }}>
+                      🗑
+                    </button>
                   </div>
                   {/* Heures du circuit */}
                   <div style={{ background: '#F8F9FB', borderRadius: '6px', padding: '8px 10px', marginBottom: '6px' }}>
