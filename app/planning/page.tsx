@@ -7,7 +7,7 @@ import DayGantt from './DayGantt'
 import CrossView from './CrossView'
 import CrossDetailView from './CrossDetailView'
 import Sidebar from '../../src/components/Sidebar'
-import { genererSquelettePourCircuit, recalculerJournee, reassignSlotToDriver } from '@/lib/planningEngine'
+import { genererSquelettePourCircuit, recalculerJournee, reassignSlotToDriver, genererSquelettePourCommande } from '@/lib/planningEngine'
 import { calculAmplitude, formatDuration, RSE_LIMITS, checkJourneeRse } from '@/lib/rse'
 
 // Détermine le code de journée à afficher dans la vue générale
@@ -485,32 +485,12 @@ export default function Planning() {
 
   async function fillFromOrder(order) {
     setSelectedOrder(order)
-    // Utiliser les horaires réels de la commande
-    const depGarage  = order.heure_depart_garage  || '07:00'
-    const prise      = order.heure_prise_charge   || '08:00'
-    const dep        = order.heure_depart         || '08:30'
-    const retour     = order.heure_retour         || '17:00'
-    const retGarage  = order.heure_retour_garage  || '18:00'
-
-    const depGarMin  = timeToMin(depGarage)
-    const priseMin   = timeToMin(prise)
-    const retGarMin  = timeToMin(retGarage)
-    const retMin     = timeToMin(retour)
-
-    // Squelette automatique
-    const skeleton = [
-      { label: 'PDS',                  type: 'neutre',     color: '#9AA3B2', start_time: minToTime(depGarMin - 10), end_time: depGarage,   from_label: 'Garage Janzé',           to_label: 'Garage Janzé',          vehicle: order.vehicule_plaque || '', notes: '' },
-      { label: 'HLP',                  type: 'neutre',     color: '#9AA3B2', start_time: depGarage,                  end_time: minToTime(priseMin - 5),   from_label: 'Garage Janzé',           to_label: order.lieu_prise_charge || order.origin || '', vehicle: order.vehicule_plaque || '', notes: '' },
-      { label: 'MEP',                  type: 'neutre',     color: '#9AA3B2', start_time: minToTime(priseMin - 5),    end_time: prise,                     from_label: order.lieu_prise_charge || order.origin || '', to_label: order.lieu_prise_charge || order.origin || '', vehicle: order.vehicule_plaque || '', notes: '' },
-      { label: order.reference,        type: 'occasionnel',color: '#D4720A', start_time: dep,                        end_time: retour,                    from_label: order.lieu_prise_charge || order.origin || '', to_label: order.lieu_depose || order.destination || '', vehicle: order.vehicule_plaque || '', notes: order.notes || '' },
-      { label: 'HLP retour',           type: 'neutre',     color: '#9AA3B2', start_time: retour,                     end_time: minToTime(retGarMin - 10), from_label: order.lieu_depose || order.destination || '', to_label: 'Garage Janzé',          vehicle: order.vehicule_plaque || '', notes: '' },
-      { label: 'FDS',                  type: 'neutre',     color: '#9AA3B2', start_time: minToTime(retGarMin - 10),  end_time: retGarage,                 from_label: 'Garage Janzé',           to_label: 'Garage Janzé',          vehicle: order.vehicule_plaque || '', notes: '' },
-    ]
-
     setSaving(true)
+
     const driverId = gantt?.driver?.id || panel?.driverId
     const date = gantt?.date || panel?.date
     if (!driverId || !date) { setSaving(false); return }
+
     const planKey = `${driverId}_${dateKey(date)}`
     let planning = plannings[planKey]
     if (!planning) {
@@ -523,14 +503,18 @@ export default function Planning() {
       setPlannings(prev => ({ ...prev, [planKey]: planning }))
     }
 
-    for (const slot of skeleton) {
-      await supabase.from('slots').insert({
-        id: generateId(), company_id: COMPANY_ID, planning_id: planning.id,
-        label: slot.label, type: slot.type, color: slot.color,
-        start_time: slot.start_time, end_time: slot.end_time,
-        from_label: slot.from_label, to_label: slot.to_label,
-        vehicle: slot.vehicle, notes: slot.notes,
-      })
+    // Génère le service + tout le squelette (PDS/HLP/MEP/FDS via OSRM + RSE),
+    // fusionné avec le reste de la journée de ce conducteur.
+    const result = await genererSquelettePourCommande(planning.id, driverId, order)
+
+    if (!result.ok) {
+      setMessage('❌ ' + (result.error || 'Erreur génération'))
+    } else {
+      let msg = `✅ Squelette créé — amplitude ${Math.floor(result.amplitude / 60)}h${String(result.amplitude % 60).padStart(2, '0')}`
+      if (result.compressionApplied) msg += ' (temps ajustés RSE)'
+      const danger = result.alerts.find(a => a.severity === 'danger')
+      if (danger) msg = '⚠️ ' + danger.message
+      setMessage(msg)
     }
 
     await supabase.from('commandes').update({
@@ -538,7 +522,6 @@ export default function Planning() {
     }).eq('id', order.id)
 
     setSaving(false)
-    setMessage('✅ Squelette de journée créé !')
     setTimeout(() => { setMessage(''); setPanel(null); loadSlots(); loadOrders() }, 1500)
   }
 

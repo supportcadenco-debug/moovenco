@@ -369,3 +369,82 @@ export async function reassignSlotToDriver(
 
   return { ok: true }
 }
+
+// ─── Génération de squelette pour une COMMANDE (occasionnel) ────────────────
+// Équivalent de circuitToService/genererSquelettePourCircuit, mais pour une
+// commande (devis/BC) au lieu d'un circuit scolaire. Contrairement aux
+// circuits, les lieux d'une commande sont en texte libre (lieu_prise_charge,
+// destination...) : on tente de retrouver l'adresse correspondante dans le
+// carnet pour avoir de vraies coordonnées GPS, sinon on garde le texte seul
+// (le moteur retombera sur une estimation par défaut pour le HLP).
+
+async function trouverAdresseParNom(nom: string | null | undefined): Promise<AddressLike> {
+  if (!nom) return { name: '' }
+  const { data } = await supabase
+    .from('addresses')
+    .select('id, name, address, lat, lng')
+    .ilike('name', `%${nom}%`)
+    .limit(1)
+    .maybeSingle()
+  if (data && data.lat != null && data.lng != null) {
+    return { id: data.id, name: data.name, lat: data.lat, lng: data.lng }
+  }
+  return { name: nom }
+}
+
+export async function commandeToService(commande: any): Promise<ServiceInput | null> {
+  const lieuDepart = commande.lieu_prise_charge || commande.origin || ''
+  const lieuArrivee = commande.lieu_depose || commande.destination || ''
+  if (!lieuDepart || !lieuArrivee) return null
+
+  const fromAddress = await trouverAdresseParNom(lieuDepart)
+  const toAddress = await trouverAdresseParNom(lieuArrivee)
+
+  return {
+    label: `Commande n°${commande.numero_sequence}`,
+    type: 'occasionnel',
+    start_time: commande.heure_depart || commande.heure_prise_charge || '08:00',
+    end_time: commande.heure_retour || '17:00',
+    from_address: fromAddress,
+    to_address: toAddress,
+    vehicle: commande.vehicule_plaque || commande.assigned_vehicle || '',
+    circuit_id: null,
+    notes: commande.notes || '',
+  }
+}
+
+/**
+ * Génère le squelette complet (PDS/HLP/MEP/FDS via OSRM + RSE) pour une
+ * commande affectée à un conducteur, insère le service + tous les tampons,
+ * puis fusionne avec le reste de la journée via recalculerJournee — un seul
+ * PDS/FDS pour toute la journée, même si le conducteur a d'autres services.
+ */
+export async function genererSquelettePourCommande(
+  planningId: string,
+  driverId: string,
+  commande: any
+): Promise<GenerationResult> {
+  const service = await commandeToService(commande)
+  if (!service) {
+    return { ok: false, inserted: 0, amplitude: 0, compressionApplied: false, alerts: [], error: 'Commande sans lieux de départ/arrivée' }
+  }
+
+  // Insérer uniquement le VRAI service ici — les tampons seront générés par
+  // recalculerJournee, qui fusionne avec tout ce qui existe déjà ce jour-là.
+  const { error } = await supabase.from('slots').insert({
+    id: generateId(), company_id: COMPANY_ID, planning_id: planningId,
+    label: service.label, type: service.type, color: '#D4720A',
+    start_time: service.start_time, end_time: service.end_time,
+    from_label: service.from_address.name || '', to_label: service.to_address.name || '',
+    from_address_id: service.from_address.id || null, to_address_id: service.to_address.id || null,
+    vehicle: service.vehicle || '', notes: service.notes || '',
+    circuit_id: null,
+  })
+  if (error) {
+    return { ok: false, inserted: 0, amplitude: 0, compressionApplied: false, alerts: [], error: error.message }
+  }
+
+  // Fusionne avec le reste de la journée (régénère tous les tampons proprement)
+  const result = await recalculerJournee(planningId, driverId)
+  return { ...result, inserted: result.inserted + 1 }
+}
