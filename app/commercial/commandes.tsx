@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../src/lib/supabase'
 import AddressPicker from '../../src/components/AddressPicker'
-import { COMPANY_ID, TYPE_VEHICULE, TYPE_CLIENT, TARIF_MODE, TVA_TAUX } from '@/lib/constants'
-import { generateId, calcTotaux, ensureClient, getTarifAuto, formatMontant } from '@/lib/utils'
+import { COMPANY_ID, TYPE_VEHICULE, TYPE_CLIENT, TARIF_MODE } from '@/lib/constants'
+import { generateId, ensureClient, getTarifAuto, formatMontant } from '@/lib/utils'
 
 const STATUT_INFO = {
   devis:      { bg: '#F0F2F5', text: '#4A5568', label: '📝 Devis' },
@@ -21,6 +21,7 @@ const EMPTY_FORM = {
   client_nom: '', client_adresse: '', client_email: '', client_siret: '', client_type: 'mairie',
   destination: '', date_service: '', vehicle_type: 'autocar',
   tarif_mode: 'km', distance_km: '', tarif_km: '', tarif_journee: '', nb_jours: 1, frais_attente: 0,
+  tva_taux: 10,
   notes: '',
 }
 
@@ -34,6 +35,7 @@ export default function Commandes({ onUnreadCountChange }) {
   const [drivers, setDrivers] = useState([])
   const [clients, setClients] = useState([])
   const [addresses, setAddresses] = useState([])
+  const [tarifs, setTarifs] = useState<any[]>([])
   const [factureLink, setFactureLink] = useState(null) // facture liée à la commande sélectionnée
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
@@ -60,16 +62,18 @@ export default function Commandes({ onUnreadCountChange }) {
   }
 
   async function loadAll() {
-    const [{ data: c }, { data: d }, { data: cl }, { data: a }] = await Promise.all([
+    const [{ data: c }, { data: d }, { data: cl }, { data: a }, { data: t }] = await Promise.all([
       supabase.from('commandes').select('*').eq('company_id', COMPANY_ID).order('date_service', { ascending: false }),
       supabase.from('profiles').select('id, name').eq('company_id', COMPANY_ID).eq('role', 'conducteur'),
       supabase.from('clients').select('*').eq('company_id', COMPANY_ID).eq('active', true).order('name'),
       supabase.from('addresses').select('id, name, address, lat, lng').eq('company_id', COMPANY_ID).order('name'),
+      supabase.from('tarifs').select('*').eq('company_id', COMPANY_ID).eq('actif', true),
     ])
     setCommandes(c || [])
     setDrivers(d || [])
     setClients(cl || [])
     setAddresses(a || [])
+    setTarifs(t || [])
     setLoading(false)
     if (onUnreadCountChange) {
       onUnreadCountChange((c || []).filter(x => x.retour_recu_at && !x.retour_vu).length)
@@ -90,15 +94,16 @@ export default function Commandes({ onUnreadCountChange }) {
 
   // ─── Création d'un nouveau devis ─────────────────────────────────────────
   function applyTarifAuto(vehicleType, clientType, mode) {
-    const t = getTarifAuto(vehicleType, clientType)
+    // Signature réelle : getTarifAuto(tarifs, vehicle, client)
+    const t = getTarifAuto(tarifs, vehicleType, clientType)
     if (!t) return
-    // getTarifAuto peut renvoyer des paliers sous forme de tableau : on force en nombre
     const tKm = num(t.tarif_km, NaN)
     const tJour = num(t.tarif_journee, NaN)
     setForm(f => ({
       ...f,
       tarif_km: mode === 'km' && Number.isFinite(tKm) ? String(tKm) : f.tarif_km,
       tarif_journee: mode !== 'km' && Number.isFinite(tJour) ? String(tJour) : f.tarif_journee,
+      tva_taux: num(t.tva, num(f.tva_taux, 10)),
     }))
   }
 
@@ -110,13 +115,15 @@ export default function Commandes({ onUnreadCountChange }) {
   }
 
   function computeMontants() {
-    // Calcul local, indépendant de calcMontantHT, pour éviter tout souci de
-    // format (chaînes des inputs, tableaux de paliers renvoyés par getTarifAuto)
+    // Calcul local aligné sur la sémantique de utils.ts :
+    // km = distance × tarif/km · journee = forfait 1 jour · multi_jours = tarif/jour × nb jours
     const fraisAttente = num(form.frais_attente)
-    const ht = form.tarif_mode === 'km'
-      ? num(form.distance_km) * num(form.tarif_km) + fraisAttente
-      : num(form.tarif_journee) * num(form.nb_jours, 1) + fraisAttente
-    return calcTotaux(ht, TVA_TAUX)
+    let ht
+    if (form.tarif_mode === 'km') ht = num(form.distance_km) * num(form.tarif_km) + fraisAttente
+    else if (form.tarif_mode === 'journee') ht = num(form.tarif_journee) + fraisAttente
+    else ht = num(form.tarif_journee) * num(form.nb_jours, 1) + fraisAttente
+    const tva = ht * (num(form.tva_taux, 10) / 100)
+    return { ht, tva, ttc: ht + tva }
   }
 
   async function saveDevis() {
@@ -136,7 +143,7 @@ export default function Commandes({ onUnreadCountChange }) {
       tarif_journee: form.tarif_journee ? num(form.tarif_journee) : null,
       nb_jours: num(form.nb_jours, 1), frais_attente: num(form.frais_attente),
       montant_ht: ht, montant_tva: tva, montant_ttc: ttc,
-      tva_taux: TVA_TAUX, notes: form.notes,
+      tva_taux: num(form.tva_taux, 10), notes: form.notes,
     })
 
     if (error) { setMessage('❌ Erreur : ' + error.message) }
@@ -265,14 +272,14 @@ export default function Commandes({ onUnreadCountChange }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
               <div>
                 <label style={labelSt}>Type de client</label>
-                <select style={inputSt} value={form.client_type} onChange={e => setForm(f => ({ ...f, client_type: e.target.value }))}>
-                  {TYPE_CLIENT.map(t => { const v = t.value ?? t.key; return <option key={v} value={v}>{t.label ?? t.name ?? v}</option> })}
+                <select style={inputSt} value={form.client_type} onChange={e => { setForm(f => ({ ...f, client_type: e.target.value })); applyTarifAuto(form.vehicle_type, e.target.value, form.tarif_mode) }}>
+                  {TYPE_CLIENT.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                 </select>
               </div>
               <div>
                 <label style={labelSt}>Type de véhicule</label>
                 <select style={inputSt} value={form.vehicle_type} onChange={e => { setForm(f => ({ ...f, vehicle_type: e.target.value })); applyTarifAuto(e.target.value, form.client_type, form.tarif_mode) }}>
-                  {TYPE_VEHICULE.map(t => { const v = t.value ?? t.key; return <option key={v} value={v}>{t.label ?? t.name ?? v}</option> })}
+                  {TYPE_VEHICULE.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                 </select>
               </div>
             </div>
@@ -303,6 +310,10 @@ export default function Commandes({ onUnreadCountChange }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                 <div><label style={labelSt}>Distance (km)</label><input type="number" style={inputSt} value={form.distance_km} onChange={e => setForm(f => ({ ...f, distance_km: e.target.value }))} /></div>
                 <div><label style={labelSt}>Tarif / km (€)</label><input type="number" step="0.0001" style={inputSt} value={form.tarif_km} onChange={e => setForm(f => ({ ...f, tarif_km: e.target.value }))} /></div>
+              </div>
+            ) : form.tarif_mode === 'journee' ? (
+              <div style={{ marginBottom: '8px' }}>
+                <label style={labelSt}>Tarif / jour (€)</label><input type="number" step="0.01" style={inputSt} value={form.tarif_journee} onChange={e => setForm(f => ({ ...f, tarif_journee: e.target.value }))} />
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
