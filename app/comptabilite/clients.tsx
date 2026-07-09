@@ -83,6 +83,17 @@ export default function Clients() {
     loadClients()
   }
 
+  async function deleteClient(client: any) {
+    if (!window.confirm(`Supprimer définitivement le client "${client.name}" ?\n\nCette action est irréversible. Les documents et l'historique liés à ce client resteront en base mais ne seront plus rattachés.`)) return
+    const { error } = await supabase.from('clients').delete().eq('id', client.id)
+    if (error) {
+      alert('Erreur lors de la suppression : ' + error.message)
+      return
+    }
+    setSelected(null)
+    loadClients()
+  }
+
   async function uploadDoc(e: any) {
     const file = e.target.files[0]
     if (!file || !selected) return
@@ -239,6 +250,10 @@ export default function Clients() {
                   <div style={{ fontSize: '14px', fontWeight: '700', color: '#1A2130' }}>{selected.name}</div>
                   <div style={{ fontSize: '11px', color: '#8A95A3' }}>{selected.type} {selected.ville ? `• ${selected.ville}` : ''}</div>
                 </div>
+                <button onClick={() => deleteClient(selected)}
+                  style={{ marginLeft: 'auto', background: '#FFEBEE', border: 'none', color: '#C62828', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '7px 14px', borderRadius: '6px', cursor: 'pointer', flexShrink: 0 }}>
+                  🗑 Supprimer le client
+                </button>
               </div>
 
               {/* Onglets */}
