@@ -28,9 +28,11 @@ export default function Sidebar({ currentPage }) {
     window.location.href = '/auth'
   }
 
-  // Chaque lien ouvre une NOUVELLE fenêtre/onglet — permet de garder plusieurs
-  // modules ouverts simultanément côte à côte.
-  const linkTarget = '_blank'
+  // Chaque module ouvre TOUJOURS la même fenêtre nommée (pas "_blank") :
+  // si l'onglet Planning est déjà ouvert et qu'on reclique sur "Planning"
+  // dans la sidebar, le navigateur réutilise cet onglet au lieu d'en créer
+  // un nouveau. On garde quand même plusieurs modules différents ouverts
+  // simultanément, puisque chacun a un nom distinct.
 
   return (
     <div style={{
@@ -41,7 +43,7 @@ export default function Sidebar({ currentPage }) {
       {/* Logo + collapse */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', padding: '14px 12px', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
         {!collapsed && (
-          <a href="/dashboard" target={linkTarget} style={{ fontSize: '15px', fontWeight: '800', letterSpacing: '-.5px', color: 'white', textDecoration: 'none' }}>
+          <a href="/dashboard" target="moovenco_dashboard" style={{ fontSize: '15px', fontWeight: '800', letterSpacing: '-.5px', color: 'white', textDecoration: 'none' }}>
             Moov<span style={{ color: '#2EC971' }}>enco</span>
           </a>
         )}
@@ -54,7 +56,7 @@ export default function Sidebar({ currentPage }) {
       {/* Modules principaux */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
         {visibleModules.map(m => (
-          <a key={m.key} href={m.href} target={linkTarget} title={collapsed ? m.label : ''}
+          <a key={m.key} href={m.href} target={`moovenco_${m.key}`} title={collapsed ? m.label : ''}
             style={{
               display: 'flex', alignItems: 'center', gap: '10px',
               background: currentPage === m.key ? '#0E5AA7' : 'transparent',
@@ -78,7 +80,7 @@ export default function Sidebar({ currentPage }) {
             {settingsOpen && !collapsed && (
               <div style={{ marginBottom: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                 {visibleSettings.map(m => (
-                  <a key={m.key} href={m.href} target={linkTarget}
+                  <a key={m.key} href={m.href} target={`moovenco_${m.key}`}
                     style={{ display: 'flex', alignItems: 'center', gap: '10px', background: currentPage === m.key ? '#0E5AA7' : 'rgba(255,255,255,.05)', color: currentPage === m.key ? 'white' : 'rgba(255,255,255,.65)', fontSize: '12px', padding: '8px 10px', borderRadius: '6px', textDecoration: 'none' }}>
                     <span style={{ fontSize: '13px' }}>{m.icon}</span><span>{m.label}</span>
                   </a>
