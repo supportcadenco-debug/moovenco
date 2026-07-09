@@ -158,7 +158,12 @@ export default function Scolaire() {
   }
 
   async function handleRemoveStop(stopId) {
-    await supabase.from('circuit_stops').delete().eq('id', stopId)
+    const { error } = await supabase.from('circuit_stops').delete().eq('id', stopId)
+    if (error) {
+      alert('Erreur lors de la suppression de l\'arrêt : ' + error.message)
+      console.error('Erreur suppression circuit_stops:', error)
+      return
+    }
     loadAll()
   }
 
