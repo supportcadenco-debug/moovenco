@@ -109,7 +109,7 @@ function LeafletMap({ lat, lng, onMapClick }) {
 }
 export default function Adresses() {
   const { ready } = useAuth('adresses')
-  const [addresses, setAddresses] = useState([])
+  const [addresses, setAddresses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [selected, setSelected] = useState(null)
@@ -118,7 +118,7 @@ export default function Adresses() {
   const [message, setMessage] = useState('')
   const [filterCat, setFilterCat] = useState('tous')
   const [search, setSearch] = useState('')
-  const [searchResults, setSearchResults] = useState([])
+  const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showMap, setShowMap] = useState(false)
@@ -317,7 +317,7 @@ export default function Adresses() {
               <div style={{ fontSize: '13px', fontWeight: '500' }}>Aucune adresse</div>
             </div>
           ) : (
-            Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([city, addrs]) => (
+            (Object.entries(grouped) as [string, any[]][]).sort(([a], [b]) => a.localeCompare(b)).map(([city, addrs]) => (
               <div key={city} style={{ marginBottom: '16px' }}>
                 <div style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '.5px', color: '#8A95A3', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>{city}</span>
