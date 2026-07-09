@@ -181,9 +181,9 @@ export default function Planning() {
   }
 
   async function loadOrders() {
-    const { data } = await supabase.from('orders').select('*')
+    const { data } = await supabase.from('commandes').select('*')
       .eq('company_id', COMPANY_ID)
-      .in('status', ['confirme', 'affecte'])
+      .in('status', ['confirmee', 'affectee'])
       .order('date_service')
     setOrders(data || [])
   }
@@ -533,8 +533,8 @@ export default function Planning() {
       })
     }
 
-    await supabase.from('orders').update({
-      status: 'affecte', assigned_driver: driverId, assigned_vehicle: order.vehicule_plaque || '',
+    await supabase.from('commandes').update({
+      status: 'affectee', assigned_driver: driverId, assigned_vehicle: order.vehicule_plaque || '',
     }).eq('id', order.id)
 
     setSaving(false)
@@ -685,8 +685,8 @@ export default function Planning() {
     if (slotErr) { setMessage('Erreur : ' + slotErr.message) }
     else {
       if (selectedOrder) {
-        await supabase.from('orders').update({
-          status: 'affecte', assigned_driver: driverId, assigned_vehicle: form.vehicle,
+        await supabase.from('commandes').update({
+          status: 'affectee', assigned_driver: driverId, assigned_vehicle: form.vehicle,
         }).eq('id', selectedOrder.id)
       }
       setMessage('✅ Créneau ajouté')
@@ -706,8 +706,8 @@ export default function Planning() {
   await supabase.from('slots').delete().eq('id', slotId)
   // Si c'était un slot occasionnel, remettre la commande en "confirme"
   if (slot?.type === 'occasionnel' && slot?.label) {
-    await supabase.from('orders')
-      .update({ status: 'confirme', assigned_driver: null, assigned_vehicle: null })
+    await supabase.from('commandes')
+      .update({ status: 'confirmee', assigned_driver: null, assigned_vehicle: null })
       .eq('reference', slot.label)
       .eq('company_id', COMPANY_ID)
   }
