@@ -26,7 +26,6 @@ const EMPTY_FORM = EMPTY_FORM_DEVIS
 export default function Commercial() {
   const { profile: authProfile, ready } = useAuth('commercial')
   const [factures, setFactures] = useState<any[]>([])
-  const [orders, setOrders] = useState<any[]>([])
   const [tarifs, setTarifs] = useState<any[]>([])
   const [drivers, setDrivers] = useState<any[]>([])
   const [clients, setClients] = useState<any[]>([])
@@ -59,7 +58,7 @@ export default function Commercial() {
   useEffect(() => { loadUnreadRetoursCount() }, [])
 
   async function loadUnreadRetoursCount() {
-    const { count } = await supabase.from('orders').select('id', { count: 'exact', head: true })
+    const { count } = await supabase.from('commandes').select('id', { count: 'exact', head: true })
       .eq('company_id', COMPANY_ID).not('retour_recu_at', 'is', null).eq('retour_vu', false)
     setUnreadRetours(count || 0)
   }
@@ -74,9 +73,8 @@ export default function Commercial() {
   }, [])
 
   async function loadAll() {
-    const [{ data: f }, { data: o }, { data: t }, { data: d }, { data: c }, { data: veh }, { data: adr }] = await Promise.all([
+    const [{ data: f }, { data: t }, { data: d }, { data: c }, { data: veh }, { data: adr }] = await Promise.all([
       supabase.from('factures').select('*').eq('company_id', COMPANY_ID).order('created_at', { ascending: false }),
-      supabase.from('orders').select('*').eq('company_id', COMPANY_ID).order('created_at', { ascending: false }),
       supabase.from('tarifs').select('*').eq('company_id', COMPANY_ID).eq('actif', true),
       supabase.from('profiles').select('id, name').eq('company_id', COMPANY_ID).eq('role', 'conducteur').eq('active', true).order('name'),
       supabase.from('clients').select('*').eq('company_id', COMPANY_ID).eq('active', true).order('name'),
@@ -84,7 +82,6 @@ export default function Commercial() {
       supabase.from('addresses').select('id, name, address, lat, lng').eq('company_id', COMPANY_ID).order('name'),
     ])
     setFactures(f || [])
-    setOrders(o || [])
     setTarifs(t || [])
     setDrivers(d || [])
     setClients(c || [])
@@ -218,28 +215,6 @@ export default function Commercial() {
         montant_ht: ht, montant_tva: tva, montant_ttc: ttc, lignes, notes: form.notes,
         ...extraFields(),
       }).eq('id', editId)
-      // Mettre à jour aussi dans orders
-      const facture = factures.find(f => f.id === editId)
-      if (facture?.numero) {
-        await supabase.from('orders').update({
-          client_responsable: form.client_nom,
-          destination: form.destination || null,
-          origin: form.origin || null,
-          date_service: form.date_service || null,
-          passengers: parseInt(form.passengers) || null,
-          vehicule_plaque: form.vehicule_plaque || null,
-          heure_depart_garage: form.heure_depart_garage || null,
-          heure_prise_charge: form.heure_prise_charge || null,
-          heure_depart: form.heure_depart || null,
-          heure_retour: form.heure_retour || null,
-          heure_retour_garage: form.heure_retour_garage || null,
-          lieu_prise_charge: form.lieu_prise_charge || null,
-          lieu_depose: form.lieu_depose || null,
-          conducteur_nom: form.conducteur_nom || null,
-          conducteur_prenom: form.conducteur_prenom || null,
-          assigned_driver: form.assigned_driver || null,
-        }).eq('reference', facture.numero).eq('company_id', COMPANY_ID)
-      }
       if (error) setMessage('Erreur : ' + error.message)
       else { setMessage('✅ Devis modifié'); setShowForm(false); setEditId(null); setForm(EMPTY_FORM); setClientSearch(''); loadAll() }
     } else {
@@ -262,39 +237,6 @@ export default function Commercial() {
       })
       if (error) setMessage('Erreur : ' + error.message)
       else {
-        await supabase.from('orders').insert({
-          company_id: COMPANY_ID,
-          reference: numero,
-          status: 'confirme',
-          client_id: clientId,
-          client_responsable: form.client_nom,
-          client_adresse: form.client_adresse,
-          client_cp_ville: `${form.client_cp} ${form.client_ville}`.trim(),
-          client_tel: form.client_contact_tel,
-          client_mail: form.client_email,
-          destination: form.destination || '',
-          origin: form.origin || '',
-          date_service: form.date_service || null,
-          date_retour: form.date_retour || null,
-          passengers: parseInt(form.passengers) || null,
-          vehicle_type: form.vehicle_type,
-          distance_km: parseInt(form.distance_km) || null,
-          price_ht: ht, tva: form.tva_taux, price_ttc: ttc,
-          notes: form.notes,
-          assigned_driver: form.assigned_driver || null,
-          conducteur_nom: form.conducteur_nom,
-          conducteur_prenom: form.conducteur_prenom,
-          vehicule_plaque: form.vehicule_plaque,
-          vehicule_places: parseInt(form.vehicule_places) || null,
-          places_prevues: parseInt(form.places_prevues) || null,
-          heure_depart_garage: form.heure_depart_garage,
-          heure_prise_charge: form.heure_prise_charge,
-          heure_depart: form.heure_depart,
-          heure_retour: form.heure_retour,
-          heure_retour_garage: form.heure_retour_garage,
-          lieu_prise_charge: form.lieu_prise_charge,
-          lieu_depose: form.lieu_depose,
-        })
         setMessage('✅ Devis créé' + (clientId ? ' — fiche client enregistrée' : ''))
         setShowForm(false); setForm(EMPTY_FORM); setClientSearch(''); loadAll()
       }
@@ -356,7 +298,6 @@ export default function Commercial() {
   async function confirmDelete() {
     if (deletePassword !== DELETE_PASSWORD) { setDeleteError('Mot de passe incorrect'); return }
     await supabase.from('factures').delete().eq('id', deleteTarget.id)
-    if (deleteTarget.numero) await supabase.from('orders').delete().eq('reference', deleteTarget.numero).eq('company_id', COMPANY_ID)
     setShowDeleteModal(false); setDeleteTarget(null); setSelected(null); loadAll()
   }
 
@@ -368,7 +309,6 @@ export default function Commercial() {
 
   async function marquerSigne(doc: any) {
     await supabase.from('factures').update({ statut: 'signe', devis_signe: true, devis_date_signature: new Date().toISOString().split('T')[0] }).eq('id', doc.id)
-    await supabase.from('orders').update({ status: 'confirme' }).eq('reference', doc.numero).eq('company_id', COMPANY_ID)
     loadAll(); setSelected((s: any) => ({ ...s, statut: 'signe' }))
   }
 
@@ -376,23 +316,12 @@ export default function Commercial() {
     if (!confirm('Transformer ce devis en facture ?')) return
     const numero = getNextNumero(factures, 'F')
     await supabase.from('factures').update({ type_document: 'facture', statut: 'emise', numero }).eq('id', doc.id)
-    await supabase.from('orders').update({ status: 'confirme' }).eq('reference', doc.numero).eq('company_id', COMPANY_ID)
     loadAll(); setSelected(null)
   }
 
   async function marquerEnvoye(doc: any) {
     await supabase.from('factures').update({ statut: 'envoyee', envoi_mail_statut: 'envoye', envoi_mail_date: new Date().toISOString() }).eq('id', doc.id)
     loadAll(); setSelected((s: any) => ({ ...s, statut: 'envoyee' }))
-  }
-
-  async function affecterConducteur(factureId: string, ordreRef: string, driverId: string) {
-    const driver = drivers.find(d => d.id === driverId)
-    if (!driver) return
-    const parts = driver.name.trim().split(' ')
-    const nom = parts[0] || ''
-    const prenom = parts.slice(1).join(' ') || ''
-    await supabase.from('orders').update({ assigned_driver: driverId, conducteur_nom: nom, conducteur_prenom: prenom, status: 'affecte' }).eq('reference', ordreRef).eq('company_id', COMPANY_ID)
-    loadAll()
   }
 
   async function loadOrderDocs(orderId: string) {
@@ -589,8 +518,7 @@ export default function Commercial() {
         doc.text(`Page ${pageNum} sur 2 - Devis n° ${order.reference || order.numero || ''}`, W / 2, H - m - 3, { align: 'center' })
       }
 
-      const orderData = orders.find(o => o.reference === selected?.numero) || {}
-      const mergedData = { ...orderData, ...selected }
+      const mergedData = { ...selected }
       genPage(doc, mergedData, 1)
       doc.addPage()
       genPage(doc, mergedData, 2)
@@ -991,27 +919,6 @@ export default function Commercial() {
                   </span>
                 </div>
               </div>
-
-              {(() => {
-                const order = orders.find(o => o.reference === selected.numero)
-                return order ? (
-                  <div style={{ background: '#F3E8FF', border: '1px solid #CE93D8', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#7B3FB5', marginBottom: '8px' }}>🧑‍✈️ Affectation conducteur</div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <select defaultValue={order.assigned_driver || ''} onChange={e => affecterConducteur(selected.id, selected.numero, e.target.value)}
-                        style={{ flex: 1, padding: '6px 8px', border: '1px solid #CE93D8', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit' }}>
-                        <option value=''>— Sélectionner un conducteur —</option>
-                        {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                      </select>
-                      {order.conducteur_nom && (
-                        <span style={{ fontSize: '11px', fontWeight: '600', color: '#7B3FB5' }}>
-                          ✓ {order.conducteur_nom} {order.conducteur_prenom}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ) : null
-              })()}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 {[

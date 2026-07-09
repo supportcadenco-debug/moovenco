@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '../../src/lib/supabase'
-import AddressPicker from '../../src/components/AddressPicker'
-import { COMPANY_ID, TYPE_VEHICULE, TYPE_CLIENT, TARIF_MODE } from '@/lib/constants'
-import { generateId, ensureClient, getTarifAuto, formatMontant } from '@/lib/utils'
+import { COMPANY_ID } from '@/lib/constants'
+import { generateId, formatMontant } from '@/lib/utils'
 
 const STATUT_INFO = {
   devis:      { bg: '#F0F2F5', text: '#4A5568', label: '📝 Devis' },
@@ -17,33 +16,26 @@ const STATUT_INFO = {
   expiree:    { bg: '#F0F2F5', text: '#8A95A3', label: '⏱ Expirée' },
 }
 
-const EMPTY_FORM = {
-  client_nom: '', client_adresse: '', client_email: '', client_siret: '', client_type: 'mairie',
-  destination: '', date_service: '', vehicle_type: 'autocar',
-  tarif_mode: 'km', distance_km: '', tarif_km: '', tarif_journee: '', nb_jours: 1, frais_attente: 0,
-  tva_taux: 10,
-  notes: '',
-}
-
 function fmtDateTime(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+function fmtDate(d) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('fr-FR')
+}
+
 export default function Commandes({ onUnreadCountChange }) {
-  const [commandes, setCommandes] = useState([])
-  const [drivers, setDrivers] = useState([])
-  const [clients, setClients] = useState([])
-  const [addresses, setAddresses] = useState([])
-  const [tarifs, setTarifs] = useState<any[]>([])
+  const [commandes, setCommandes] = useState<any[]>([])
+  const [drivers, setDrivers] = useState<any[]>([])
+  const [devisDisponibles, setDevisDisponibles] = useState<any[]>([])
   const [factureLink, setFactureLink] = useState(null) // facture liée à la commande sélectionnée
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
   const [filter, setFilter] = useState('actives') // 'actives' | 'devis' | 'nonVus' | 'tous'
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [clientSearch, setClientSearch] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
+  const [transforming, setTransforming] = useState(false)
   const [message, setMessage] = useState('')
 
   useEffect(() => { init() }, [])
@@ -53,7 +45,14 @@ export default function Commandes({ onUnreadCountChange }) {
     await loadAll()
   }
 
-  // Suppression définitive des devis non confirmés depuis plus de 14 jours.
+  // Convertit n'importe quelle valeur en nombre sûr
+  function num(v, fallback = 0) {
+    if (Array.isArray(v)) v = v[0]
+    const n = parseFloat(v)
+    return Number.isFinite(n) ? n : fallback
+  }
+
+  // Suppression définitive des devis non confirmés depuis plus de 14 jours (lignes legacy de la table commandes).
   async function cleanupDevisExpires() {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - 14)
@@ -62,21 +61,22 @@ export default function Commandes({ onUnreadCountChange }) {
   }
 
   async function loadAll() {
-    const [{ data: c }, { data: d }, { data: cl }, { data: a }, { data: t }] = await Promise.all([
+    const [{ data: c }, { data: d }, { data: dv }] = await Promise.all([
       supabase.from('commandes').select('*').eq('company_id', COMPANY_ID).order('date_service', { ascending: false }),
       supabase.from('profiles').select('id, name').eq('company_id', COMPANY_ID).eq('role', 'conducteur'),
-      supabase.from('clients').select('*').eq('company_id', COMPANY_ID).eq('active', true).order('name'),
-      supabase.from('addresses').select('id, name, address, lat, lng').eq('company_id', COMPANY_ID).order('name'),
-      supabase.from('tarifs').select('*').eq('company_id', COMPANY_ID).eq('actif', true),
+      supabase.from('factures').select('*').eq('company_id', COMPANY_ID)
+        .eq('type_document', 'devis').in('statut', ['devis', 'signe'])
+        .order('created_at', { ascending: false }),
     ])
-    setCommandes(c || [])
+    const cmds = c || []
+    setCommandes(cmds)
     setDrivers(d || [])
-    setClients(cl || [])
-    setAddresses(a || [])
-    setTarifs(t || [])
+    // Un devis déjà transformé (devis_numero présent dans commandes) n'est plus proposé
+    const dejaTransformes = new Set(cmds.map(x => x.devis_numero).filter(Boolean))
+    setDevisDisponibles((dv || []).filter(x => !dejaTransformes.has(x.numero)))
     setLoading(false)
     if (onUnreadCountChange) {
-      onUnreadCountChange((c || []).filter(x => x.retour_recu_at && !x.retour_vu).length)
+      onUnreadCountChange(cmds.filter(x => x.retour_recu_at && !x.retour_vu).length)
     }
   }
 
@@ -92,72 +92,67 @@ export default function Commandes({ onUnreadCountChange }) {
     if (onUnreadCountChange) onUnreadCountChange(updated.filter(x => x.retour_recu_at && !x.retour_vu).length)
   }
 
-  // ─── Création d'un nouveau devis ─────────────────────────────────────────
-  function applyTarifAuto(vehicleType, clientType, mode) {
-    // Signature réelle : getTarifAuto(tarifs, vehicle, client)
-    const t = getTarifAuto(tarifs, vehicleType, clientType)
-    if (!t) return
-    const tKm = num(t.tarif_km, NaN)
-    const tJour = num(t.tarif_journee, NaN)
-    setForm(f => ({
-      ...f,
-      tarif_km: mode === 'km' && Number.isFinite(tKm) ? String(tKm) : f.tarif_km,
-      tarif_journee: mode !== 'km' && Number.isFinite(tJour) ? String(tJour) : f.tarif_journee,
-      tva_taux: num(t.tva, num(f.tva_taux, 10)),
-    }))
-  }
+  // ─── Transformation d'un devis (table factures) en bon de commande ────────
+  async function transformerDepuisDevis(devis) {
+    if (!window.confirm(`Transformer le devis ${devis.numero} (${devis.client_nom}) en bon de commande ?`)) return
+    setTransforming(true)
+    setMessage('')
 
-  // Convertit n'importe quelle valeur (chaîne, tableau de paliers…) en nombre sûr
-  function num(v, fallback = 0) {
-    if (Array.isArray(v)) v = v[0]
-    const n = parseFloat(v)
-    return Number.isFinite(n) ? n : fallback
-  }
-
-  function computeMontants() {
-    // Calcul local aligné sur la sémantique de utils.ts :
-    // km = distance × tarif/km · journee = forfait 1 jour · multi_jours = tarif/jour × nb jours
-    const fraisAttente = num(form.frais_attente)
-    let ht
-    if (form.tarif_mode === 'km') ht = num(form.distance_km) * num(form.tarif_km) + fraisAttente
-    else if (form.tarif_mode === 'journee') ht = num(form.tarif_journee) + fraisAttente
-    else ht = num(form.tarif_journee) * num(form.nb_jours, 1) + fraisAttente
-    const tva = ht * (num(form.tva_taux, 10) / 100)
-    return { ht, tva, ttc: ht + tva }
-  }
-
-  async function saveDevis() {
-    if (!form.client_nom) { setMessage('❌ Nom client obligatoire'); return }
-    setSaving(true)
-    const { ht, tva, ttc } = computeMontants()
-    const clientId = await ensureClient(form)
+    // Garde d'unicité : on revérifie en base qu'aucun BC n'existe déjà pour ce devis
+    const { data: existing } = await supabase.from('commandes')
+      .select('id').eq('company_id', COMPANY_ID).eq('devis_numero', devis.numero).limit(1)
+    if (existing && existing.length > 0) {
+      setMessage(`❌ Un bon de commande existe déjà pour le devis ${devis.numero}`)
+      setTransforming(false)
+      loadAll()
+      return
+    }
 
     const { error } = await supabase.from('commandes').insert({
-      id: generateId(), company_id: COMPANY_ID, status: 'devis',
-      client_id: clientId, client_responsable: form.client_nom, client_adresse: form.client_adresse,
-      client_mail: form.client_email, client_siret: form.client_siret, client_type: form.client_type,
-      destination: form.destination, date_service: form.date_service || null,
-      vehicle_type: form.vehicle_type, tarif_mode: form.tarif_mode,
-      distance_km: form.distance_km ? num(form.distance_km) : null,
-      tarif_km: form.tarif_km ? num(form.tarif_km) : null,
-      tarif_journee: form.tarif_journee ? num(form.tarif_journee) : null,
-      nb_jours: num(form.nb_jours, 1), frais_attente: num(form.frais_attente),
-      montant_ht: ht, montant_tva: tva, montant_ttc: ttc,
-      tva_taux: num(form.tva_taux, 10), notes: form.notes,
+      id: generateId(), company_id: COMPANY_ID,
+      status: 'confirmee',
+      devis_numero: devis.numero,
+      devis_signe: true,
+      devis_date_signature: devis.devis_date_signature || new Date().toISOString().slice(0, 10),
+      client_id: devis.client_id || null,
+      client_responsable: devis.client_nom,
+      client_adresse: devis.client_adresse,
+      client_mail: devis.client_email,
+      client_siret: devis.client_siret,
+      client_type: devis.client_type,
+      destination: devis.destination || '',
+      date_service: devis.date_service || null,
+      vehicle_type: devis.vehicle_type,
+      tarif_mode: devis.tarif_mode,
+      distance_km: devis.distance_km != null ? num(devis.distance_km) : null,
+      tarif_km: devis.tarif_km != null ? num(devis.tarif_km) : null,
+      tarif_journee: devis.tarif_journee != null ? num(devis.tarif_journee) : null,
+      nb_jours: num(devis.nb_jours, 1),
+      frais_attente: num(devis.frais_attente),
+      montant_ht: num(devis.montant_ht),
+      montant_tva: num(devis.montant_tva),
+      montant_ttc: num(devis.montant_ttc),
+      tva_taux: num(devis.tva_taux, 10),
+      notes: devis.notes || '',
     })
 
-    if (error) { setMessage('❌ Erreur : ' + error.message) }
-    else {
-      setMessage('✅ Devis créé')
-      setShowForm(false); setForm(EMPTY_FORM); setClientSearch('')
-      loadAll()
+    if (error) {
+      setMessage('❌ Erreur : ' + error.message)
+      setTransforming(false)
+      return
     }
-    setSaving(false)
+
+    // Le devis passe au statut "BC émis" dans Devis & Factures
+    await supabase.from('factures').update({ statut: 'bc' }).eq('id', devis.id)
+
+    setMessage(`✅ Bon de commande créé à partir du devis ${devis.numero} — prêt à être affecté dans le Planning`)
+    setShowPicker(false)
+    setTransforming(false)
+    loadAll()
   }
 
+  // ─── Transformation d'une ligne legacy (status devis dans commandes) ──────
   async function transformerEnBC(cmd) {
-    // Garde : un devis ne peut être transformé qu'une seule fois.
-    // On revérifie le statut en base pour éviter tout doublon (double clic, onglet ouvert ailleurs…)
     const { data: fresh } = await supabase.from('commandes').select('status').eq('id', cmd.id).single()
     if (fresh && fresh.status !== 'devis') {
       setMessage('❌ Ce devis a déjà été transformé en bon de commande')
@@ -182,6 +177,7 @@ export default function Commandes({ onUnreadCountChange }) {
   // ─── Sélection d'une commande : charge la facture liée si elle existe ────
   async function selectCommande(cmd) {
     setSelected(cmd)
+    setShowPicker(false)
     setFactureLink(null)
     if (['facturee', 'payee'].includes(cmd.status)) {
       const { data } = await supabase.from('factures').select('id, numero, montant_ttc, statut').eq('commande_id', cmd.id).maybeSingle()
@@ -201,17 +197,14 @@ export default function Commandes({ onUnreadCountChange }) {
     return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8A95A3', fontSize: '13px' }}>Chargement…</div>
   }
 
-  const inputSt = { width: '100%', padding: '6px 9px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit', boxSizing: 'border-box' }
-  const labelSt = { fontSize: '10px', fontWeight: '600', color: '#4A5568', display: 'block', marginBottom: '3px' }
-
   return (
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
       {/* LISTE */}
       <div style={{ width: '340px', minWidth: '340px', borderRight: '1px solid #E2E6EA', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '10px', borderBottom: '1px solid #E2E6EA', background: '#F8F9FB' }}>
-          <button onClick={() => { setShowForm(true); setSelected(null); setForm(EMPTY_FORM); setClientSearch('') }}
+          <button onClick={() => { setShowPicker(true); setSelected(null); setMessage('') }}
             style={{ width: '100%', background: '#2EC971', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '8px', borderRadius: '6px', cursor: 'pointer', marginBottom: '8px' }}>
-            + Nouveau devis
+            📋 À partir d'un devis {devisDisponibles.length > 0 ? `(${devisDisponibles.length})` : ''}
           </button>
           <div style={{ display: 'flex', gap: '4px' }}>
             {[['actives', 'Actives'], ['devis', 'Devis'], ['nonVus', 'Non vus'], ['tous', 'Toutes']].map(([v, l]) => (
@@ -235,6 +228,7 @@ export default function Commandes({ onUnreadCountChange }) {
                   <span style={{ fontSize: '12px', fontWeight: '700', color: '#1A2130' }}>
                     {unread && <span style={{ color: '#D4720A' }}>🔔 </span>}
                     N°{c.numero_sequence}
+                    {c.devis_numero && <span style={{ fontSize: '9px', fontWeight: '600', color: '#7B3FB5', marginLeft: '6px' }}>({c.devis_numero})</span>}
                   </span>
                   <span style={{ fontSize: '9px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px', background: statut.bg, color: statut.text }}>{statut.label}</span>
                 </div>
@@ -246,7 +240,7 @@ export default function Commandes({ onUnreadCountChange }) {
         </div>
       </div>
 
-      {/* DÉTAIL / FORMULAIRE */}
+      {/* DÉTAIL / SÉLECTEUR DE DEVIS */}
       <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
         {message && (
           <div style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', background: message.includes('❌') ? '#FFEBEE' : '#E8F5E9', color: message.includes('❌') ? '#C62828' : '#1A9E50' }}>
@@ -254,94 +248,47 @@ export default function Commandes({ onUnreadCountChange }) {
           </div>
         )}
 
-        {showForm ? (
-          <div style={{ maxWidth: '560px' }}>
-            <div style={{ fontSize: '15px', fontWeight: '700', color: '#1A2130', marginBottom: '16px' }}>📝 Nouveau devis</div>
-
-            <div style={{ marginBottom: '8px' }}>
-              <label style={labelSt}>Client</label>
-              <input style={inputSt} list="clients-list" value={clientSearch}
-                onChange={e => {
-                  setClientSearch(e.target.value)
-                  const found = clients.find(c => c.name === e.target.value)
-                  setForm(f => ({ ...f, client_nom: e.target.value, client_adresse: found?.address || f.client_adresse, client_email: found?.email || f.client_email, client_siret: found?.siret || f.client_siret }))
-                }} placeholder="Nom du client (mairie, école, association…)" />
-              <datalist id="clients-list">{clients.map(c => <option key={c.id} value={c.name} />)}</datalist>
+        {showPicker ? (
+          <div style={{ maxWidth: '640px' }}>
+            <div style={{ fontSize: '15px', fontWeight: '700', color: '#1A2130', marginBottom: '4px' }}>📋 Créer un bon de commande à partir d'un devis</div>
+            <div style={{ fontSize: '11px', color: '#8A95A3', marginBottom: '16px' }}>
+              Les devis se créent dans l'onglet <strong>Devis &amp; Factures</strong>. Seuls les devis non encore transformés apparaissent ici.
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-              <div>
-                <label style={labelSt}>Type de client</label>
-                <select style={inputSt} value={form.client_type} onChange={e => { setForm(f => ({ ...f, client_type: e.target.value })); applyTarifAuto(form.vehicle_type, e.target.value, form.tarif_mode) }}>
-                  {TYPE_CLIENT.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                </select>
+            {devisDisponibles.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#8A95A3', padding: '40px', background: 'white', borderRadius: '10px', border: '1px solid #E2E6EA' }}>
+                <div style={{ fontSize: '28px', marginBottom: '8px' }}>📭</div>
+                <div style={{ fontSize: '12px', fontWeight: '500' }}>Aucun devis disponible</div>
+                <div style={{ fontSize: '11px', marginTop: '4px' }}>Créez d'abord un devis dans l'onglet Devis &amp; Factures.</div>
               </div>
-              <div>
-                <label style={labelSt}>Type de véhicule</label>
-                <select style={inputSt} value={form.vehicle_type} onChange={e => { setForm(f => ({ ...f, vehicle_type: e.target.value })); applyTarifAuto(e.target.value, form.client_type, form.tarif_mode) }}>
-                  {TYPE_VEHICULE.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                </select>
+            ) : devisDisponibles.map(dv => (
+              <div key={dv.id} style={{ background: 'white', border: '1px solid #E2E6EA', borderRadius: '10px', padding: '14px 16px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#1A2130' }}>{dv.numero}</span>
+                    <span style={{ fontSize: '9px', fontWeight: '700', padding: '2px 8px', borderRadius: '10px', background: dv.statut === 'signe' ? '#FFF3E0' : '#F3E8FF', color: dv.statut === 'signe' ? '#D4720A' : '#7B3FB5' }}>
+                      {dv.statut === 'signe' ? 'Signé' : 'Devis'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#4A5568', fontWeight: '600' }}>{dv.client_nom || '—'}</div>
+                  <div style={{ fontSize: '10px', color: '#8A95A3' }}>
+                    {dv.destination || '—'} · {fmtDate(dv.date_service)} · {dv.montant_ttc ? `${formatMontant(dv.montant_ttc)} € TTC` : 'montant —'}
+                  </div>
+                </div>
+                <button onClick={() => transformerDepuisDevis(dv)} disabled={transforming}
+                  style={{ background: transforming ? '#8A95A3' : '#0E5AA7', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '10px', fontWeight: '700', padding: '8px 12px', borderRadius: '6px', cursor: transforming ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {transforming ? '⏳' : '→ Transformer en BC'}
+                </button>
               </div>
-            </div>
-
-            <div style={{ marginBottom: '8px' }}>
-              <label style={labelSt}>Destination</label>
-              <AddressPicker addresses={addresses} value={form.destination} onChange={({ label }) => setForm(f => ({ ...f, destination: label }))} placeholder="Rechercher une adresse…" />
-            </div>
-
-            <div style={{ marginBottom: '8px' }}>
-              <label style={labelSt}>Date de service</label>
-              <input type="date" style={inputSt} value={form.date_service} onChange={e => setForm(f => ({ ...f, date_service: e.target.value }))} />
-            </div>
-
-            <div style={{ marginBottom: '8px' }}>
-              <label style={labelSt}>Mode de tarification</label>
-              <div style={{ display: 'flex', gap: '5px' }}>
-                {TARIF_MODE.map(m => (
-                  <button key={m.key} onClick={() => { setForm(f => ({ ...f, tarif_mode: m.key })); applyTarifAuto(form.vehicle_type, form.client_type, m.key) }}
-                    style={{ flex: 1, background: form.tarif_mode === m.key ? '#0E5AA7' : '#F8F9FB', color: form.tarif_mode === m.key ? 'white' : '#4A5568', border: '1px solid #D0D4DA', fontFamily: 'inherit', fontSize: '10px', fontWeight: '600', padding: '5px 4px', borderRadius: '5px', cursor: 'pointer' }}>
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {form.tarif_mode === 'km' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                <div><label style={labelSt}>Distance (km)</label><input type="number" style={inputSt} value={form.distance_km} onChange={e => setForm(f => ({ ...f, distance_km: e.target.value }))} /></div>
-                <div><label style={labelSt}>Tarif / km (€)</label><input type="number" step="0.0001" style={inputSt} value={form.tarif_km} onChange={e => setForm(f => ({ ...f, tarif_km: e.target.value }))} /></div>
-              </div>
-            ) : form.tarif_mode === 'journee' ? (
-              <div style={{ marginBottom: '8px' }}>
-                <label style={labelSt}>Tarif / jour (€)</label><input type="number" step="0.01" style={inputSt} value={form.tarif_journee} onChange={e => setForm(f => ({ ...f, tarif_journee: e.target.value }))} />
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                <div><label style={labelSt}>Nb jours</label><input type="number" style={inputSt} value={form.nb_jours} onChange={e => setForm(f => ({ ...f, nb_jours: e.target.value }))} /></div>
-                <div><label style={labelSt}>Tarif / jour (€)</label><input type="number" step="0.01" style={inputSt} value={form.tarif_journee} onChange={e => setForm(f => ({ ...f, tarif_journee: e.target.value }))} /></div>
-              </div>
-            )}
-
-            <div style={{ marginBottom: '8px' }}>
-              <label style={labelSt}>Notes</label>
-              <textarea style={{ ...inputSt, resize: 'vertical' }} rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-
-            <div style={{ background: '#F0F7FF', border: '1px solid #B8D9F5', borderRadius: '6px', padding: '10px', marginBottom: '14px', fontSize: '12px', color: '#0E5AA7', fontWeight: '700' }}>
-              Total estimé TTC : {formatMontant(computeMontants().ttc)} €
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={() => setShowForm(false)} style={{ background: '#F0F2F5', border: 'none', color: '#4A5568', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}>Annuler</button>
-              <button onClick={saveDevis} disabled={saving} style={{ background: '#0E5AA7', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}>
-                {saving ? 'Création…' : '✓ Créer le devis'}
-              </button>
-            </div>
+            ))}
+            <button onClick={() => setShowPicker(false)}
+              style={{ background: '#F0F2F5', border: 'none', color: '#4A5568', fontFamily: 'inherit', fontSize: '11px', fontWeight: '600', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', marginTop: '4px' }}>
+              Fermer
+            </button>
           </div>
         ) : !selected ? (
           <div style={{ textAlign: 'center', color: '#8A95A3', padding: '60px' }}>
             <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
-            <div style={{ fontSize: '13px' }}>Sélectionnez une commande, ou créez un nouveau devis</div>
+            <div style={{ fontSize: '13px' }}>Sélectionnez une commande, ou créez un bon de commande à partir d'un devis</div>
           </div>
         ) : (
           <div style={{ maxWidth: '640px' }}>
@@ -349,6 +296,9 @@ export default function Commandes({ onUnreadCountChange }) {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '16px', fontWeight: '700', color: '#1A2130' }}>Commande N°{selected.numero_sequence}</span>
+                  {selected.devis_numero && (
+                    <span style={{ fontSize: '10px', fontWeight: '600', color: '#7B3FB5', background: '#F3E8FF', padding: '2px 8px', borderRadius: '8px' }}>Devis {selected.devis_numero}</span>
+                  )}
                   <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 10px', borderRadius: '10px', background: (STATUT_INFO[selected.status] || {}).bg, color: (STATUT_INFO[selected.status] || {}).text }}>
                     {(STATUT_INFO[selected.status] || {}).label || selected.status}
                   </span>
