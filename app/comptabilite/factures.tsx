@@ -52,7 +52,7 @@ export default function Factures() {
     const [{ data: f }, { data: t }, { data: o }, { data: c }] = await Promise.all([
       supabase.from('factures').select('*').eq('company_id', COMPANY_ID).order('created_at', { ascending: false }),
       supabase.from('tarifs').select('*').eq('company_id', COMPANY_ID).eq('actif', true),
-      supabase.from('orders').select('*').eq('company_id', COMPANY_ID).in('status', ['confirme', 'affecte', 'termine']),
+      supabase.from('commandes').select('*').eq('company_id', COMPANY_ID).eq('status', 'realisee'),
       supabase.from('clients').select('*').eq('company_id', COMPANY_ID).eq('active', true).order('name'),
     ])
     setDocs(f || [])
@@ -158,7 +158,7 @@ export default function Factures() {
       // CRÉATION
       const prefix = isDevis ? 'DEV' : 'F'
       const numero = getNextNumero(docs, prefix)
-      const { error } = await supabase.from('factures').insert({
+      const { data: newFacture, error } = await supabase.from('factures').insert({
         id: generateId(), company_id: COMPANY_ID,
         numero, type_document: form.type_document,
         statut: isDevis ? 'devis' : 'emise',
@@ -183,9 +183,15 @@ export default function Factures() {
         retour_heure_dep_reel: form.retour_heure_dep_reel || null,
         retour_heure_ret_reel: form.retour_heure_ret_reel || null,
         inclure_retour_pdf: form.inclure_retour_pdf || false,
-      })
+        commande_id: form.commande_source_id || null,
+      }).select().single()
       if (error) setMessage('Erreur : ' + error.message)
       else {
+        // Si la facture est liée à une commande, on fait basculer son statut
+        // à "facturee" — elle disparaît de la liste "à facturer".
+        if (form.commande_source_id && !isDevis) {
+          await supabase.from('commandes').update({ status: 'facturee' }).eq('id', form.commande_source_id)
+        }
         setMessage(isDevis ? '✅ Devis créé' + (clientId ? ' — fiche client enregistrée' : '') : '✅ Facture créée')
         setShowForm(false); setForm(EMPTY_FORM); setClientSearch(''); loadAll()
       }
@@ -403,10 +409,6 @@ export default function Factures() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={() => { setForm({ ...EMPTY_FORM, type_document: 'devis' }); setClientSearch(''); setEditId(null); setShowForm(true); setSelected(null) }}
-            style={{ background: '#7B3FB5', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 14px', borderRadius: '5px', cursor: 'pointer' }}>
-            + Nouveau devis
-          </button>
           <button onClick={() => { setForm({ ...EMPTY_FORM, type_document: 'facture' }); setClientSearch(''); setEditId(null); setShowForm(true); setSelected(null) }}
             style={{ background: '#2EC971', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '11px', fontWeight: '700', padding: '4px 14px', borderRadius: '5px', cursor: 'pointer' }}>
             + Nouvelle facture
@@ -449,7 +451,7 @@ export default function Factures() {
           </div>
           <div style={{ padding: '10px 14px', borderTop: '1px solid #E2E6EA', background: '#F8F9FB' }}>
             {[
-              ['Devis en cours', docs.filter(d => d.type_document === 'devis').length + ' doc.', '#7B3FB5'],
+              ['À facturer', orders.length + ' commande(s)', '#D4720A'],
               ['Factures émises', docs.filter(d => d.type_document === 'facture' && d.statut === 'emise').reduce((a, d) => a + parseFloat(d.montant_ttc || 0), 0).toFixed(2) + ' €', '#1565C0'],
               ['Encaissé', docs.filter(d => d.statut === 'payee').reduce((a, d) => a + parseFloat(d.montant_ttc || 0), 0).toFixed(2) + ' €', '#1A9E50'],
             ].map(([label, val, color]) => (
@@ -491,11 +493,12 @@ export default function Factures() {
                       const distanceFinale = kmReel != null ? kmReel : (o.distance_km || '')
                       setForm((f: any) => ({
                         ...f,
+                        commande_source_id: o.id,
                         client_nom: o.client_responsable || '', client_adresse: o.client_adresse || '', client_email: o.client_mail || '',
-                        vehicle_type: o.vehicle_type || 'autocar', date_service: o.date_service || '', bc_reference: o.bon_commande_ref || '',
+                        vehicle_type: o.vehicle_type || 'autocar', date_service: o.date_service || '', bc_reference: o.bon_commande_ref ? o.bon_commande_ref : `Commande n°${o.numero_sequence}`,
                         distance_km: distanceFinale,
                         tarif_km: t?.tarif_km || '', tarif_journee: t?.tarif_journee || '',
-                        notes: `Réf. : ${o.reference}` + (kmReel != null ? ` — km réel retour BC (${o.retour_km_dep_garage} → ${o.retour_km_ret_garage})` : ''),
+                        notes: `Réf. : Commande n°${o.numero_sequence}` + (kmReel != null ? ` — km réel retour BC (${o.retour_km_dep_garage} → ${o.retour_km_ret_garage})` : ''),
                         // Infos retour BC reportées sur la facture (si disponibles)
                         retour_km_reel: kmReel,
                         retour_vehicule_reel: o.retour_vehicule_reel || '',
@@ -506,9 +509,12 @@ export default function Factures() {
                       setClientSearch(o.client_responsable || '')
                     }}
                     style={{ marginLeft: 'auto', padding: '5px 8px', border: '1px solid #D0D4DA', borderRadius: '5px', fontSize: '11px', fontFamily: 'inherit', color: '#4A5568' }}>
-                    <option value=''>⚡ Pré-remplir depuis une commande…</option>
-                    {orders.map((o: any) => <option key={o.id} value={o.id}>{o.reference} — {o.destination || '?'}</option>)}
+                    <option value=''>⚡ Facturer une commande réalisée…</option>
+                    {orders.map((o: any) => <option key={o.id} value={o.id}>N°{o.numero_sequence} — {o.client_responsable} — {o.destination || '?'}</option>)}
                   </select>
+                )}
+                {orders.length === 0 && !editId && (
+                  <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#8A95A3', fontStyle: 'italic' }}>Aucune commande réalisée en attente de facturation</span>
                 )}
               </div>
 
@@ -856,12 +862,8 @@ export default function Factures() {
           {!selected && !showForm && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: '10px', color: '#8A95A3' }}>
               <div style={{ fontSize: '48px', opacity: .2 }}>🧾</div>
-              <div style={{ fontSize: '13px', fontWeight: '500' }}>Sélectionnez un document ou créez-en un</div>
+              <div style={{ fontSize: '13px', fontWeight: '500' }}>Sélectionnez un document ou créez une facture à partir d'une commande réalisée</div>
               <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                <button onClick={() => { setForm({ ...EMPTY_FORM, type_document: 'devis' }); setClientSearch(''); setEditId(null); setShowForm(true) }}
-                  style={{ background: '#7B3FB5', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '12px', fontWeight: '600', padding: '8px 20px', borderRadius: '6px', cursor: 'pointer' }}>
-                  + Nouveau devis
-                </button>
                 <button onClick={() => { setForm({ ...EMPTY_FORM, type_document: 'facture' }); setClientSearch(''); setEditId(null); setShowForm(true) }}
                   style={{ background: '#0E5AA7', border: 'none', color: 'white', fontFamily: 'inherit', fontSize: '12px', fontWeight: '600', padding: '8px 20px', borderRadius: '6px', cursor: 'pointer' }}>
                   + Nouvelle facture
