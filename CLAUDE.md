@@ -218,3 +218,15 @@ Chaque requête Supabase filtre par `.eq('company_id', COMPANY_ID)`. `COMPANY_ID
 
 ### Pattern de chargement
 Les pages chargent leurs données en parallèle via `Promise.all([...])` dans un `loadAll()` appelé au mount.
+
+---
+
+## Agents disponibles
+
+Définis dans `.claude/agents/`. À invoquer via l'outil Agent avec le paramètre `subagent_type`.
+
+| Agent | Domaine |
+|---|---|
+| `planning-rse` | Module planning : squelettes automatiques, OSRM, conformité RSE 561/2006 (amplitude, conduite continue, nuit), vues Gantt/croisée |
+| `facturation-specialist` | Module commercial : circuit Devis → Signé → Facture → Payée, numérotation, génération PDF jsPDF, envoi email Resend |
+| `spécialiste-conformité` | Suivi réglementaire conducteurs/véhicules : permis, FIMO/FCO, visites médicales, contrôles techniques, alertes d'expiration |
