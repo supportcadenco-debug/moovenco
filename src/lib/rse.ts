@@ -43,6 +43,11 @@ export const RSE_LIMITS = {
 
   // Cycle de travail
   MAX_PERIODES_24H_CONSECUTIVES: 6,   // 6 périodes de 24h max avant repos hebdo
+
+  // Conduite de nuit (règlement 561/2006)
+  CONDUITE_NUIT_MAX: 4 * 60,          // 240 min — max entre 21h et 06h
+  NUIT_DEBUT: 21 * 60,                // 1260 min — début plage nocturne
+  NUIT_FIN: 6 * 60,                   // 360 min — fin plage nocturne (06h00)
 } as const
 
 export type RseSeverity = 'ok' | 'warning' | 'danger'
@@ -148,6 +153,45 @@ export function calculTempsConduite(slots: (SlotLike & { label?: string })[]): n
     .reduce((total, s) => total + dureeSaine(s), 0)
 }
 
+/**
+ * Temps de conduite sur la plage nocturne 21h-06h (règlement 561/2006).
+ * Gère le chevauchement minuit : un créneau 23h-02h est représenté en
+ * temps étendu [1380, 1500] et intersecté avec [1260, 1800].
+ * Les créneaux purement matinaux (ex: 05h-07h) sont intersectés avec [0, 360].
+ */
+export function calculConduiteNuit(slots: (SlotLike & { label?: string })[]): number {
+  const NUIT_A = RSE_LIMITS.NUIT_DEBUT                // 1260 — 21h
+  const NUIT_B = 24 * 60 + RSE_LIMITS.NUIT_FIN        // 1800 — 30h (= 6h lendemain)
+  const MATIN_FIN = RSE_LIMITS.NUIT_FIN                // 360  — 06h
+
+  const conduiteSlots = slots.filter(s =>
+    !estReposOuVacances(s) &&
+    (TYPES_CONDUITE.includes(s.type || '') || (s.label || '').toUpperCase().startsWith('HLP'))
+  )
+
+  let total = 0
+  for (const s of conduiteSlots) {
+    if (!s.start_time || !s.end_time) continue
+    const start = timeToMinutes(s.start_time)
+    let end = timeToMinutes(s.end_time)
+
+    // Créneau chevauchant minuit (ex: 23h→02h) → représentation étendue
+    if (end <= start) end += 24 * 60
+
+    // Intersection avec [21h, 30h] (soirée + début de nuit jusqu'à 6h du lendemain)
+    const overlapNuit = Math.max(0, Math.min(end, NUIT_B) - Math.max(start, NUIT_A))
+
+    // Intersection avec [0, 6h] pour les créneaux qui ne croisent pas minuit (ex: 05h-07h)
+    const overlapMatin = end <= 24 * 60
+      ? Math.max(0, Math.min(end, MATIN_FIN) - Math.max(start, 0))
+      : 0  // déjà capturé dans overlapNuit via représentation étendue
+
+    total += overlapNuit + overlapMatin
+  }
+
+  return total
+}
+
 /** Temps de service = somme des durées des créneaux actifs (hors repos/vacances) */
 export function calculTempsService(slots: (SlotLike & { label?: string })[]): number {
   return slots
@@ -208,6 +252,18 @@ export function checkJourneeRse(slots: SlotLike[], options?: { repreceptionNorma
       message: `Conduite ${formatDuration(tempsConduite)} — dépassement exceptionnel (max 2x/semaine)`,
       valeur: tempsConduite,
       limite: RSE_LIMITS.CONDUITE_MAX_JOUR,
+    })
+  }
+
+  // Conduite de nuit (21h-06h)
+  const conduiteNuit = calculConduiteNuit(slots)
+  if (conduiteNuit > RSE_LIMITS.CONDUITE_NUIT_MAX) {
+    alerts.push({
+      code: 'CONDUITE_NUIT_DEPASSEE',
+      severity: 'danger',
+      message: `Conduite de nuit ${formatDuration(conduiteNuit)} — dépasse la limite de 4h (21h-06h)`,
+      valeur: conduiteNuit,
+      limite: RSE_LIMITS.CONDUITE_NUIT_MAX,
     })
   }
 

@@ -8,6 +8,7 @@
 import { supabase } from './supabase'
 import { buildSkeleton, ServiceInput, SkeletonSlot, circuitDejaPresent } from './skeleton'
 import { AddressLike } from './osrm'
+import { checkJourneeRse } from './rse'
 
 const COMPANY_ID = 'bae899ec-b4fd-4b0d-bacf-112e0a2bc6c5'
 
@@ -366,6 +367,18 @@ export async function reassignSlotToDriver(
   // 4. Recalculer les deux journées impactées
   if (fromPlanningId) await recalculerJournee(fromPlanningId, fromDriverId)
   await recalculerJournee(toPlanningId, toDriverId)
+
+  // 5. Vérifier la conformité nuit sur la journée cible après recalcul
+  const { data: slotsApres } = await supabase.from('slots').select('*').eq('planning_id', toPlanningId)
+  const rseCheck = checkJourneeRse(slotsApres || [])
+  const alerteNuit = rseCheck.alerts.find(a => a.code === 'CONDUITE_NUIT_DEPASSEE')
+  if (alerteNuit) {
+    // Annuler : remettre le créneau dans la journée d'origine
+    await supabase.from('slots').update({ planning_id: fromPlanningId }).eq('id', slotId)
+    if (fromPlanningId) await recalculerJournee(fromPlanningId, fromDriverId)
+    await recalculerJournee(toPlanningId, toDriverId)
+    return { ok: false, error: alerteNuit.message }
+  }
 
   return { ok: true }
 }
