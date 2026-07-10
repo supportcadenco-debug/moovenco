@@ -107,11 +107,11 @@ Toutes les tables ont `company_id = COMPANY_ID` (UUID hardcodé dans `src/lib/co
 | `planning` | Enregistrement journalier par conducteur. Clés : `driver_id`, `date`, `day_type`, `day_color`, `valide`, `valide_at` |
 | `slots` | Créneaux dans un planning. Clés : `planning_id`, `label`, `type` (`scolaire/occasionnel/mixte/regulier/repos/neutre`), `color`, `start_time`, `end_time`, `from_label`, `to_label`, `vehicle`, `notes`, `circuit_id` |
 | `profiles` | Utilisateurs = conducteurs + admin. Clés : `id`, `name`, `role` (`conducteur/super_admin/directeur/gestionnaire`), `company_id`, `active`, `initials`, `color`, `contract` |
-| `driver_details` | Infos complémentaires conducteur. Clés : `id` (= profiles.id), `dispo_vacances` |
+| `driver_details` | Infos complémentaires conducteur. Clés : `id` (= profiles.id), `dispo_vacances`, `permis_expiry`, `vehicle_habituel`, `point_attache_id`, `notes` |
 | `driver_circuits` | Circuits habituels par conducteur. Clés : `driver_id`, `circuit_id`, `jours` (array de jours), `actif` |
-| `absences` | Absences du personnel. Clés : `driver_id`, `date_debut`, `date_fin`, `type`, `motif` |
+| `absences` | Absences du personnel. Clés : `conducteur_uid`, `date_debut`, `date_fin`, `type`, `motif`, `statut`, `commentaire`, `traite_par`, `traite_le`, `conducteur_nom` |
 | `prepaie_jours` | Saisie journalière pour la paie. Clés : `driver_id`, `date`, `type_journee`, `heures` |
-| `staff_documents` | Documents RH (contrats, permis…). Clés : `driver_id`, `nom`, `categorie`, `url` |
+| `staff_documents` | Documents RH (contrats, permis…). Clés : `profile_id`, `nom`, `categorie`, `url` |
 | `permissions` | RBAC : `role`, `module`, `access` (`none/read/write`) |
 
 ### Scolaire
