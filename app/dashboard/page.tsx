@@ -140,18 +140,21 @@ export default function DashboardPage() {
   const conducteursActifs = drivers.filter(d => d.active).length
   const interventionsEnCours = interventions.filter(i => i.status === 'planifie' || i.status === 'en_cours').length
 
-  // Alertes contrôle technique / assurance à venir (30 jours)
+  // Alertes contrôle technique / assurance / tachygraphe à venir (90j et 7j)
   const alertesVehicules = useMemo(() => {
-    const in30 = new Date(); in30.setDate(in30.getDate() + 30)
-    const in30Str = in30.toISOString().slice(0, 10)
     const today = new Date().toISOString().slice(0, 10)
-    let count = 0
+    const in90 = new Date(); in90.setDate(in90.getDate() + 90)
+    const in90Str = in90.toISOString().slice(0, 10)
+    const in7 = new Date(); in7.setDate(in7.getDate() + 7)
+    const in7Str = in7.toISOString().slice(0, 10)
+    let count90 = 0, urgent7 = 0
     vehicles.forEach(v => {
-      ;['ct_expiry', 'assurance_expiry', 'visite_expiry'].forEach(field => {
-        if (v[field] && v[field] >= today && v[field] <= in30Str) count++
+      ;['ct_expiry', 'assurance_expiry', 'tachygraphe_expiry'].forEach(field => {
+        if (v[field] && v[field] >= today && v[field] <= in90Str) count90++
+        if (v[field] && v[field] >= today && v[field] <= in7Str) urgent7++
       })
     })
-    return count
+    return { count90, urgent7 }
   }, [vehicles])
 
   // Consommation moyenne flotte (dernier mois de données dispo)
@@ -232,9 +235,11 @@ export default function DashboardPage() {
             <div style={{ fontSize: '10px', color: '#8A95A3', marginTop: '2px' }}>{conducteursActifs} conducteur(s) actif(s)</div>
           </div>
           <div style={kpiCardStyle}>
-            <div style={{ fontSize: '10px', color: '#8A95A3', fontWeight: '600', textTransform: 'uppercase' }}>Alertes échéances (30j)</div>
-            <div style={{ fontSize: '22px', fontWeight: '700', color: alertesVehicules > 0 ? '#C62828' : '#1A9E50', marginTop: '4px' }}>{alertesVehicules}</div>
-            <div style={{ fontSize: '10px', color: '#8A95A3', marginTop: '2px' }}>{interventionsEnCours} intervention(s) en cours</div>
+            <div style={{ fontSize: '10px', color: '#8A95A3', fontWeight: '600', textTransform: 'uppercase' }}>Alertes échéances (90j)</div>
+            <div style={{ fontSize: '22px', fontWeight: '700', color: alertesVehicules.urgent7 > 0 ? '#C62828' : alertesVehicules.count90 > 0 ? '#D4720A' : '#1A9E50', marginTop: '4px' }}>{alertesVehicules.count90}</div>
+            <div style={{ fontSize: '10px', color: alertesVehicules.urgent7 > 0 ? '#C62828' : '#8A95A3', marginTop: '2px' }}>
+              {alertesVehicules.urgent7 > 0 ? `${alertesVehicules.urgent7} urgente(s) ≤ 7j` : `${interventionsEnCours} intervention(s) en cours`}
+            </div>
           </div>
           {consoMoyenneFlotte != null && (
             <div style={kpiCardStyle}>

@@ -111,7 +111,7 @@ export default function Personnel() {
   const [search, setSearch]              = useState('')
   const [tab, setTab]                    = useState('fiche')
   const [form, setForm]                  = useState({ name:'', initials:'', color:'#0E5AA7', role:'conducteur', contract:'', email:'', password:'', is_conducteur_secondaire: false })
-  const [driverForm, setDriverForm]      = useState<any>({ permis:[], fimo_expiry:'', fco_expiry:'', visite_medicale:'', carte_conducteur:'', vehicle_habituel:'', dispo_vacances:false, notes:'' })
+  const [driverForm, setDriverForm]      = useState<any>({ permis:[], fimo_expiry:'', fco_expiry:'', visite_medicale:'', carte_conducteur:'', permis_expiry:'', vehicle_habituel:'', dispo_vacances:false, notes:'' })
   const [saving, setSaving]              = useState(false)
   const [message, setMessage]            = useState('')
   const [editingDriver, setEditingDriver]= useState(false)
@@ -286,6 +286,7 @@ export default function Personnel() {
       fco_expiry: driverForm.fco_expiry || null,
       visite_expiry: driverForm.visite_medicale || null,
       carte_conducteur_expiry: driverForm.carte_conducteur || null,
+      permis_expiry: driverForm.permis_expiry || null,
       vehicle_habituel: driverForm.vehicle_habituel || null,
       point_attache_id: driverForm.point_attache_id || null,
       dispo_vacances: driverForm.dispo_vacances || false,
@@ -319,6 +320,7 @@ export default function Personnel() {
       fco_expiry:      dd?.fco_expiry || '',
       visite_medicale: dd?.visite_expiry || '',
       carte_conducteur:dd?.carte_conducteur_expiry || '',
+      permis_expiry:   dd?.permis_expiry || '',
       vehicle_habituel:dd?.vehicle_habituel || '',
       point_attache_id:dd?.point_attache_id || '',
       dispo_vacances:  dd?.dispo_vacances || false,
@@ -499,7 +501,7 @@ export default function Personnel() {
                     {filtered.map((person: any, i: number) => {
                       const role = getRoleInfo(person.role)
                       const pd = driverDetails[person.id]
-                      const hasAlert = pd && ((pd.fimo_expiry && daysUntil(pd.fimo_expiry) < 30) || (pd.visite_expiry && daysUntil(pd.visite_expiry) < 30))
+                      const hasAlert = pd && [pd.fimo_expiry, pd.fco_expiry, pd.visite_expiry, pd.carte_conducteur_expiry, pd.permis_expiry].some(d => d && (daysUntil(d) ?? 999) < 90)
                       const personPending = allAbsences.filter((a: any) => a.conducteur_uid === person.id && a.statut === 'pending').length
                       return (
                         <tr key={person.id} style={{ borderBottom:'1px solid #F0F2F5', background: i%2===0?'white':'#FAFBFC', cursor:'pointer' }}
@@ -692,7 +694,7 @@ export default function Personnel() {
                                 ))}
                               </div>
                             </div>
-                            {[['FIMO — expiration','fimo_expiry'],['FCO — expiration','fco_expiry'],['Visite médicale','visite_medicale'],['Carte conducteur','carte_conducteur']].map(([label, key]) => (
+                            {[['FIMO — expiration','fimo_expiry'],['FCO — expiration','fco_expiry'],['Visite médicale','visite_medicale'],['Carte conducteur','carte_conducteur'],['Permis — expiration','permis_expiry']].map(([label, key]) => (
                               <div key={key}>
                                 <label style={{ fontSize:'10px', fontWeight:'600', color:'#4A5568', display:'block', marginBottom:'3px' }}>{label}</label>
                                 <input type="date" value={driverForm[key]} onChange={e => setDriverForm((f: any) => ({ ...f, [key]: e.target.value }))} style={{ ...inputSt }} />
@@ -739,6 +741,7 @@ export default function Personnel() {
                             <ExpiryTag date={dd.fco_expiry}              label="FCO" />
                             <ExpiryTag date={dd.visite_expiry}           label="Visite médicale" />
                             <ExpiryTag date={dd.carte_conducteur_expiry} label="Carte conducteur" />
+                            <ExpiryTag date={dd.permis_expiry}           label="Permis" />
                             {dd.vehicle_habituel && <div style={{ fontSize:'11px', color:'#4A5568', marginTop:'4px' }}>🚌 <strong>Véhicule habituel :</strong> {dd.vehicle_habituel}</div>}
                             {dd.point_attache_id && (() => {
                               const pa = addresses.find(a => a.id === dd.point_attache_id)
@@ -883,7 +886,7 @@ export default function Personnel() {
           [staff.filter((s: any) => s.active).length, 'Actifs'],
           [staff.length, 'Total'],
           [staff.filter((s: any) => s.role === 'conducteur').length, 'Conducteurs'],
-          [Object.values(driverDetails).filter((d: any) => d.visite_expiry && (daysUntil(d.visite_expiry) ?? 999) < 30).length, 'Alertes certifications'],
+          [Object.values(driverDetails).filter((d: any) => [d.fimo_expiry, d.fco_expiry, d.visite_expiry, d.carte_conducteur_expiry, d.permis_expiry].some(f => f && (daysUntil(f) ?? 999) < 90)).length, 'Alertes certifications'],
           [pendingCount, 'Absences en attente'],
         ].map(([v, l]) => (
           <div key={l as string}>
