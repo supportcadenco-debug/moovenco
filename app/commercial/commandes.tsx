@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../src/lib/supabase'
 import { COMPANY_ID } from '@/lib/constants'
-import { generateId, formatMontant } from '@/lib/utils'
+import { generateId, formatMontant, getNextNumero } from '@/lib/utils'
 
 const STATUT_INFO = {
   devis:      { bg: '#F0F2F5', text: '#4A5568', label: '📝 Devis' },
@@ -108,8 +108,10 @@ export default function Commandes({ onUnreadCountChange }) {
       return
     }
 
+    const reference = getNextNumero(commandes, 'BC')
     const { error } = await supabase.from('commandes').insert({
       id: generateId(), company_id: COMPANY_ID,
+      reference,
       status: 'confirmee',
       devis_numero: devis.numero,
       devis_signe: true,
